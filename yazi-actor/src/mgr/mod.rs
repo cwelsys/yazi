@@ -21,6 +21,7 @@ yazi_macro::mod_flat!(
 	hardlink
 	hidden
 	hover
+	ignore
 	leave
 	linemode
 	link

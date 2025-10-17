@@ -25,7 +25,9 @@ bitflags         = { workspace = true }
 dirs             = { workspace = true }
 either           = { workspace = true }
 foldhash         = { workspace = true }
+git2             = "0.20"
 hashbrown        = { workspace = true }
+ignore           = "0.4"
 parking_lot      = { workspace = true }
 percent-encoding = { workspace = true }
 rand             = { workspace = true }
@@ -37,15 +39,15 @@ tracing          = { workspace = true }
 typed-path       = { workspace = true }
 
 [target."cfg(unix)".dependencies]
-libc  = { workspace = true }
+libc = { workspace = true }
 uzers = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = [ "Win32_Storage_FileSystem" ] }
+windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation-sys = { workspace = true }
-objc2               = { workspace = true }
+objc = { workspace = true }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 trash = "5.2.5"

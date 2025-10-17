@@ -17,19 +17,19 @@ debug = "line-tables-only"
 
 [profile.release]
 codegen-units = 1
-lto           = true
-panic         = "abort"
-strip         = true
+lto = true
+panic = "abort"
+strip = true
 
 [profile.release-windows]
 inherits = "release"
-panic    = "unwind"
+panic = "unwind"
 
 [profile.dev-opt]
-inherits      = "release"
+inherits = "release"
 codegen-units = 256
-incremental   = true
-lto           = false
+incremental = true
+lto = false
 
 [profile.dev.package."*"]
 debug = false

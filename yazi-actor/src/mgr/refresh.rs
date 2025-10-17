@@ -19,6 +19,9 @@ impl Actor for Refresh {
 	fn act(cx: &mut Ctx, _: Self::Options) -> Result<Data> {
 		CWD.set(cx.cwd(), Self::cwd_changed);
 
+		// Apply ignore filter before triggering file loads
+		act!(mgr:ignore, cx)?;
+
 		if let Some(p) = cx.parent() {
 			Self::trigger_dirs(&[cx.current(), p]);
 		} else {

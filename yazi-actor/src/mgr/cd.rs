@@ -52,6 +52,7 @@ impl Actor for Cd {
 		act!(mgr:displace, cx)?;
 		act!(mgr:hidden, cx).ok();
 		act!(mgr:sort, cx).ok();
+		act!(mgr:ignore, cx).ok();
 		act!(mgr:hover, cx)?;
 		act!(mgr:refresh, cx)?;
 		act!(mgr:stash, cx, opt).ok();

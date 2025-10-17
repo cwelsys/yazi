@@ -122,6 +122,7 @@ impl<'a> Executor<'a> {
 		on!(copy);
 		on!(shell);
 		on!(hidden);
+		on!(ignore);
 		on!(linemode);
 		on!(search);
 		on!(search_do);

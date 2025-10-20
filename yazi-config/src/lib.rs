@@ -1,4 +1,4 @@
-yazi_macro::mod_pub!(keymap mgr open opener plugin popup preview tasks theme which vfs);
+yazi_macro::mod_pub!(files keymap mgr open opener plugin popup preview tasks theme which vfs);
 
 yazi_macro::mod_flat!(icon layout pattern platform preset priority style utils yazi);
 

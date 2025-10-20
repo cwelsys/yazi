@@ -24,12 +24,6 @@ pub struct Mgr {
 	pub show_symlink: SyncCell<bool>,
 	pub scrolloff:    SyncCell<u8>,
 	pub mouse_events: SyncCell<MouseEvents>,
-
-	// Filtering
-	#[serde(default)]
-	pub gitignore_enable: bool,
-	#[serde(default)]
-	pub ignore_override:  Vec<String>,
 }
 
 impl Mgr {

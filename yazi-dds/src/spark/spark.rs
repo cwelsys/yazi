@@ -43,6 +43,7 @@ pub enum Spark<'a> {
 	EscapeSearch(yazi_parser::VoidOpt),
 	EscapeSelect(yazi_parser::VoidOpt),
 	EscapeVisual(yazi_parser::VoidOpt),
+	ExcludeAdd(yazi_parser::mgr::ExcludeAddOpt),
 	Filter(yazi_parser::mgr::FilterOpt),
 	FilterDo(yazi_parser::mgr::FilterOpt),
 	Find(yazi_parser::mgr::FindOpt),
@@ -227,6 +228,7 @@ impl<'a> IntoLua for Spark<'a> {
 			Self::EscapeSearch(b) => b.into_lua(lua),
 			Self::EscapeSelect(b) => b.into_lua(lua),
 			Self::EscapeVisual(b) => b.into_lua(lua),
+			Self::ExcludeAdd(b) => b.into_lua(lua),
 			Self::Filter(b) => b.into_lua(lua),
 			Self::FilterDo(b) => b.into_lua(lua),
 			Self::Find(b) => b.into_lua(lua),
@@ -394,6 +396,7 @@ try_from_spark!(yazi_parser::mgr::CreateOpt, mgr:create);
 try_from_spark!(yazi_parser::mgr::DisplaceDoOpt, mgr:displace_do);
 try_from_spark!(yazi_parser::mgr::DownloadOpt, mgr:download);
 try_from_spark!(yazi_parser::mgr::EscapeOpt, mgr:escape);
+try_from_spark!(yazi_parser::mgr::ExcludeAddOpt, mgr:exclude_add);
 try_from_spark!(yazi_parser::mgr::FilterOpt, mgr:filter, mgr:filter_do);
 try_from_spark!(yazi_parser::mgr::FindArrowOpt, mgr:find_arrow);
 try_from_spark!(yazi_parser::mgr::FindDoOpt, mgr:find_do);

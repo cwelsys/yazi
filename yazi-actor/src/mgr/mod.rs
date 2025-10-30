@@ -11,6 +11,7 @@ yazi_macro::mod_flat!(
 	download
 	enter
 	escape
+	exclude_add
 	filter
 	filter_do
 	find

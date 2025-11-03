@@ -5645,6 +5645,7 @@ dependencies = [
  "crossterm 0.29.0",
  "either",
  "futures",
+ "globset",
  "hashbrown 0.16.1",
  "libc",
  "mlua",

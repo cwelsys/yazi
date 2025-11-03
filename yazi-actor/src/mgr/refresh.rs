@@ -19,9 +19,6 @@ impl Actor for Refresh {
 	fn act(cx: &mut Ctx, _: Self::Options) -> Result<Data> {
 		CWD.set(cx.cwd(), Self::cwd_changed);
 
-		// Apply ignore filter before triggering file loads
-		act!(mgr:ignore, cx)?;
-
 		if let Some(p) = cx.parent() {
 			Self::trigger_dirs(&[cx.current(), p]);
 		} else {
@@ -60,7 +57,6 @@ impl Refresh {
 			.filter(|&f| f.url.is_absolute() && f.url.is_internal())
 			.map(|&f| go(f.url.clone(), f.cha))
 			.collect();
-
 		if !futs.is_empty() {
 			tokio::spawn(futures::future::join_all(futs));
 		}

@@ -13,6 +13,7 @@ yazi_macro::mod_flat!(
 	enter
 	escape
 	exclude_add
+	excluded
 	filter
 	filter_do
 	find

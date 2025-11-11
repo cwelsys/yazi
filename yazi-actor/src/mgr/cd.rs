@@ -68,7 +68,15 @@ impl Actor for Cd {
 		act!(mgr:displace, cx)?;
 		act!(mgr:hidden, cx).ok();
 		act!(mgr:sort, cx).ok();
-		act!(mgr:ignore, cx).ok();
+
+		// Apply config excludes if no plugin patterns are set
+		// This ensures config patterns work when gitignore plugin is disabled
+		// When plugins are enabled, they handle merging via exclude_add
+		if cx.tab().current.files.ignore_filter().is_none() {
+			act!(mgr:ignore, cx).ok();
+		}
+
+
 		act!(mgr:hover, cx)?;
 		act!(mgr:refresh, cx)?;
 		act!(mgr:stash, cx, opt).ok();

@@ -6,6 +6,7 @@ use yazi_parser::mgr::UpdateFilesOpt;
 use yazi_shared::{data::Data, url::UrlLike};
 use yazi_watcher::local::LINKED;
 
+use super::Ignore;
 use crate::{Actor, Ctx};
 
 pub struct UpdateFiles;
@@ -90,6 +91,15 @@ impl UpdateFiles {
 		let folder = cx.tab_mut().history.entry_ref(url).or_insert_with(|| Folder::from(url));
 
 		if folder.update_pub(id, op) {
+			// Apply ignore filter with the hovered dir's own context if not already cached
+			if folder.files.ignore_filter().is_none() {
+				let hovered_str = if folder.url.is_search() {
+					"search://**".to_string()
+				} else {
+					folder.url.loc().as_os().ok().map(|p| p.display().to_string()).unwrap_or_default()
+				};
+				Ignore::apply_filter_for_context(folder, &hovered_str);
+			}
 			act!(mgr:peek, cx, true)?;
 		}
 		succ!();

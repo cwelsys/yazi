@@ -132,9 +132,6 @@ impl<'a> Executor<'a> {
 		on!(filter);
 		on!(filter_do);
 
-		// Exclude
-		on!(exclude_add);
-
 		// Find
 		on!(find);
 		on!(find_do);

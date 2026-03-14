@@ -41,10 +41,7 @@ impl Actor for Cd {
 		// Current
 		let mut rep = tab.history.remove_or(&opt.target);
 
-		// Only force reload if folder doesn't have cached ignore filters
-		// If filters are cached, we can reuse the folder as-is (files are already
-		// filtered) This avoids the race condition where cached unfiltered files
-		// appear before plugin runs
+		// Reuse folder if it already has cached exclude filters
 		if rep.files.ignore_filter().is_none() {
 			rep.cha = Default::default();
 			rep.files.update_ioerr();
@@ -56,7 +53,7 @@ impl Actor for Cd {
 		// Parent
 		if let Some(parent) = opt.target.parent() {
 			let mut parent_folder = tab.history.remove_or(parent);
-			// Only force parent reload if it doesn't have cached filters
+			// Reuse parent folder if it already has cached exclude filters
 			if parent_folder.files.ignore_filter().is_none() {
 				parent_folder.cha = Default::default();
 				parent_folder.files.update_ioerr();
@@ -69,9 +66,7 @@ impl Actor for Cd {
 		act!(mgr:hidden, cx).ok();
 		act!(mgr:sort, cx).ok();
 
-		// Apply config excludes if no plugin patterns are set
-		// This ensures config patterns work when gitignore plugin is disabled
-		// When plugins are enabled, they handle merging via exclude_add
+		// Apply exclude filters if not already cached
 		if cx.tab().current.files.ignore_filter().is_none() {
 			act!(mgr:ignore, cx).ok();
 		}

@@ -27,6 +27,7 @@ impl UserData for Preference {
 		fields.add_cached_field("name", |lua, me| lua.create_string(&me.name));
 		fields.add_cached_field("linemode", |lua, me| lua.create_string(&*me.linemode));
 		fields.add_field_method_get("show_hidden", |_, me| Ok(me.show_hidden));
+		fields.add_field_method_get("show_excluded", |_, me| Ok(me.show_excluded));
 
 		// Sorting
 		fields.add_cached_field("sort_by", |_, me| Ok(me.sort_by.into_str()));

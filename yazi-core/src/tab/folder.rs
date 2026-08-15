@@ -1,10 +1,10 @@
-use std::{mem, ops::Deref};
+use std::{mem, ops::Deref, sync::Arc};
 
-use yazi_config::{LAYOUT, YAZI};
+use yazi_config::{LAYOUT, YAZI, files::Exclude};
 use yazi_dds::Pubsub;
-use yazi_fs::{Entries, FilesOp, FolderStage, cha::ChaType, file::File};
+use yazi_fs::{Entries, ExcludeFilter, FilesOp, FolderStage, cha::ChaType, file::File};
 use yazi_macro::log_if_err;
-use yazi_shared::{id::Id, path::{DynPath, PathBufDyn, PathDyn}, url::UrlBuf};
+use yazi_shared::{id::Id, path::{DynPath, PathBufDyn, PathDyn}, url::{UrlBuf, UrlLike}};
 use yazi_watcher::RefreshRequest;
 use yazi_widgets::{Scrollable, Step};
 
@@ -47,7 +47,21 @@ impl Default for Folder {
 
 impl<T: Into<UrlBuf>> From<T> for Folder {
 	fn from(value: T) -> Self {
-		Self { file: File::from_dummy(value, Some(ChaType::Dir)), ..Default::default() }
+		let url: UrlBuf = value.into();
+
+		// Bake the exclude rules in the way `show_hidden` is baked in above: which
+		// rules apply, and whether the listing is flattened, follow from the folder
+		// alone, so neither can change once it exists.
+		let mut entries = Entries::new(YAZI.mgr.show_hidden.get());
+		let rules = YAZI.files.excludes_in(&url);
+		if !rules.is_empty() {
+			let recursive = url.is_search();
+			entries.set_excludes(Some(ExcludeFilter::new(Arc::new(move |u, is_dir| {
+				Exclude::verdict(&rules, u, is_dir, recursive)
+			}))));
+		}
+
+		Self { file: File::from_dummy(url, Some(ChaType::Dir)), entries, ..Default::default() }
 	}
 }
 

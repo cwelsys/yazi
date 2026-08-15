@@ -3,7 +3,7 @@ use std::{mem, ops::{Deref, DerefMut, Not}};
 use hashbrown::{HashMap, HashSet};
 use yazi_shared::{id::Id, path::{PathBufDyn, PathDyn, PathLike}};
 
-use super::{FilesSorter, Filter};
+use super::{ExcludeFilter, FilesSorter, Filter};
 use crate::{FILES_TICKET, SortBy, file::File};
 
 #[derive(Default)]
@@ -16,9 +16,11 @@ pub struct Entries {
 
 	pub sizes: HashMap<PathBufDyn, u64>,
 
-	sorter:      FilesSorter,
-	filter:      Option<Filter>,
-	show_hidden: bool,
+	sorter:        FilesSorter,
+	filter:        Option<Filter>,
+	show_hidden:   bool,
+	show_excluded: bool,
+	excludes:      Option<ExcludeFilter>,
 }
 
 impl Deref for Entries {
@@ -170,14 +172,10 @@ impl Entries {
 			};
 		}
 
-		let (mut hidden, mut items) = if let Some(filter) = &self.filter {
-			files
-				.into_iter()
-				.partition(|(_, f)| (f.is_hidden() && !self.show_hidden) || !filter.matches(f.urn()))
-		} else if self.show_hidden {
-			(HashMap::new(), files)
+		let (mut hidden, mut items) = if self.concealing() {
+			files.into_iter().partition(|(_, f)| self.conceals(f))
 		} else {
-			files.into_iter().partition(|(_, f)| f.is_hidden())
+			(HashMap::new(), files)
 		};
 
 		if !items.is_empty() {
@@ -225,13 +223,24 @@ impl Entries {
 
 	fn split_files(&self, files: impl IntoIterator<Item = File>) -> (Vec<File>, Vec<File>) {
 		let files = files.into_iter().filter(|f| !f.key().is_empty());
-		if let Some(filter) = &self.filter {
-			files.partition(|f| (f.is_hidden() && !self.show_hidden) || !filter.matches(f.urn()))
-		} else if self.show_hidden {
-			(vec![], files.collect())
+		if self.concealing() {
+			files.partition(|f| self.conceals(f))
 		} else {
-			files.partition(|f| f.is_hidden())
+			(vec![], files.collect())
 		}
+	}
+
+	// Whether anything can be concealed at all; when nothing can, partitioning is
+	// pure overhead.
+	#[inline]
+	fn concealing(&self) -> bool {
+		!self.show_hidden || self.filter.is_some() || (self.excludes.is_some() && !self.show_excluded)
+	}
+
+	fn conceals(&self, file: &File) -> bool {
+		(file.is_hidden() && !self.show_hidden)
+			|| self.filter.as_ref().is_some_and(|ft| !ft.matches(file.urn()))
+			|| (!self.show_excluded && self.excludes.as_ref().is_some_and(|ex| ex.matches(file)))
 	}
 }
 
@@ -282,6 +291,31 @@ impl Entries {
 		let it = mem::take(&mut self.items).into_iter().chain(mem::take(&mut self.hidden));
 		(self.hidden, self.items) = self.split_files(it);
 		self.sorter.sort(&mut self.items, &self.sizes);
+		true
+	}
+
+	// --- Excludes
+	// Which rules apply is fixed by the folder, so the matcher is set once at
+	// construction and never replaced; only `show_excluded` moves after that.
+	#[inline]
+	pub fn set_excludes(&mut self, excludes: Option<ExcludeFilter>) { self.excludes = excludes; }
+
+	// --- Show excluded
+	#[inline]
+	pub fn show_excluded(&self) -> bool { self.show_excluded }
+
+	pub fn set_show_excluded(&mut self, state: bool) -> bool {
+		if self.show_excluded == state {
+			return false;
+		}
+
+		self.show_excluded = state;
+
+		let it = mem::take(&mut self.items).into_iter().chain(mem::take(&mut self.hidden));
+		(self.hidden, self.items) = self.split_files(it);
+		self.sorter.sort(&mut self.items, &self.sizes);
+		self.revision += 1;
+
 		true
 	}
 

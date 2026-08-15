@@ -7,6 +7,7 @@ yazi_macro::mod_flat!(
 	displace_do
 	download
 	escape
+	excluded
 	filter
 	find
 	find_arrow

@@ -57,6 +57,7 @@ pub enum Spark<'a> {
 	Follow(crate::VoidForm),
 	Forward(crate::VoidForm),
 	Hardlink(crate::mgr::HardlinkForm),
+	Excluded(crate::mgr::ExcludedForm),
 	Hidden(crate::mgr::HiddenForm),
 	Hover(crate::mgr::HoverForm),
 	Leave(crate::VoidForm),
@@ -261,6 +262,7 @@ impl<'a> IntoLua for Spark<'a> {
 			Self::Follow(b) => b.into_lua(lua),
 			Self::Forward(b) => b.into_lua(lua),
 			Self::Hardlink(b) => b.into_lua(lua),
+			Self::Excluded(b) => b.into_lua(lua),
 			Self::Hidden(b) => b.into_lua(lua),
 			Self::Hover(b) => b.into_lua(lua),
 			Self::Leave(b) => b.into_lua(lua),
@@ -431,6 +433,7 @@ try_from_spark!(crate::mgr::FilterForm, mgr:filter, mgr:filter_do);
 try_from_spark!(crate::mgr::FindArrowForm, mgr:find_arrow);
 try_from_spark!(crate::mgr::FindDoForm, mgr:find_do);
 try_from_spark!(crate::mgr::FindForm, mgr:find);
+try_from_spark!(crate::mgr::ExcludedForm, mgr:excluded);
 try_from_spark!(crate::mgr::HardlinkForm, mgr:hardlink);
 try_from_spark!(crate::mgr::HiddenForm, mgr:hidden);
 try_from_spark!(crate::mgr::HoverForm, mgr:hover);

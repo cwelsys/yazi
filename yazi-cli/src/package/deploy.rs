@@ -2,16 +2,16 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use yazi_fs::engine::{Engine, local::Local};
-use yazi_macro::outln;
 
 use super::Dependency;
 use crate::shared::{copy_and_seal, maybe_exists};
 
 impl Dependency {
-	pub(super) async fn deploy(&mut self, discard: bool) -> Result<()> {
+	/// Returns whether the package was newly deployed, rather than already in
+	/// place.
+	pub(super) async fn deploy(&mut self, discard: bool) -> Result<bool> {
 		let from = self.local().join(&self.child);
 
-		self.header("Deploying package `{name}`")?;
 		self.is_flavor = maybe_exists(&from.join("flavor.toml")).await;
 		let files =
 			if self.is_flavor { Self::flavor_files() } else { Self::plugin_files(&from).await? };
@@ -39,9 +39,7 @@ impl Dependency {
 		res1?;
 
 		self.hash = self.hash().await?;
-		outln!("Done!")?;
-
-		Ok(())
+		Ok(!exists)
 	}
 
 	async fn deploy_assets(from: PathBuf, to: PathBuf) -> Result<()> {

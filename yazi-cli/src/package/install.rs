@@ -4,9 +4,9 @@ use super::{Dependency, Git};
 use crate::shared::must_exists;
 
 impl Dependency {
-	pub(super) async fn install(&mut self, discard: bool) -> Result<()> {
-		self.header("Fetching package `{name}`")?;
-
+	/// Returns whether the package was newly deployed, rather than already in
+	/// place.
+	pub(super) async fn install(&mut self, discard: bool) -> Result<bool> {
 		let path = self.local();
 		if must_exists(&path).await {
 			Git::fetch(&path).await?;
@@ -18,11 +18,11 @@ impl Dependency {
 			Git::checkout(&path, self.rev.trim_start_matches('=')).await?;
 		}
 
-		self.deploy(discard).await?;
+		let fresh = self.deploy(discard).await?;
 		if self.rev.is_empty() {
 			self.rev = Git::revision(&path).await?;
 		}
 
-		Ok(())
+		Ok(fresh)
 	}
 }

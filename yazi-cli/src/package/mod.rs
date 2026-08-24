@@ -1,4 +1,4 @@
-yazi_macro::mod_flat!(add delete dependency deploy git hash install package report upgrade);
+yazi_macro::mod_flat!(add delete dependency deploy fetcher git hash install package report);
 
 use anyhow::Context;
 use yazi_fs::Xdg;

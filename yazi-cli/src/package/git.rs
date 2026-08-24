@@ -22,12 +22,6 @@ impl Git {
 		Self::materialize(path).await
 	}
 
-	pub(super) async fn pull(path: &Path) -> Result<()> {
-		Self::fetch(path).await?;
-		Self::checkout(path, "origin/HEAD").await?;
-		Ok(())
-	}
-
 	pub(super) async fn revision(path: &Path) -> Result<String> {
 		let output = Command::new("git")
 			.args(["rev-parse", "--short", "HEAD"])

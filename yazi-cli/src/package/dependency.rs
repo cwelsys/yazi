@@ -40,6 +40,9 @@ impl Dependency {
 		}
 	}
 
+	/// Whether the package is held at an exact revision, and so never moves.
+	pub(super) fn pinned(&self) -> bool { self.rev.starts_with('=') }
+
 	pub(super) fn identical(&self, other: &Self) -> bool {
 		self.parent == other.parent && self.child == other.child
 	}

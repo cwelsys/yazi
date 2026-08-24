@@ -1,11 +1,11 @@
-use std::{fmt::Display, io, path::PathBuf, str::FromStr};
+use std::{fmt::Display, io, num::NonZeroUsize, path::PathBuf, str::FromStr};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use yazi_fs::{Xdg, engine::{Engine, local::Local}};
 use yazi_macro::{ok_or_not_found, outln};
 
-use super::{Dependency, Report};
+use super::{Dependency, Fetcher, Report};
 
 #[derive(Default)]
 pub(crate) struct Package {
@@ -19,15 +19,40 @@ impl Package {
 		Ok(toml::from_str(&s)?)
 	}
 
-	pub(crate) async fn add_many(&mut self, uses: &[String]) -> Result<()> {
+	pub(crate) async fn add_many(&mut self, uses: &[String], jobs: NonZeroUsize) -> Result<()> {
 		let mut tally = Tally::default();
+
+		// Resolve the whole batch up front, so that every repository it needs can be
+		// fetched at once; each package is still reported in the order it was given.
+		let mut deps = Vec::with_capacity(uses.len());
 		for u in uses {
-			let r = self.add(&mut tally, u).await;
-			self.save().await?;
-			if let Err(e) = r {
-				tally.fail(u, &e)?;
-			}
+			deps.push(self.resolve(&deps, u));
 		}
+
+		let fetcher = Fetcher::run(deps.iter().flatten(), jobs).await;
+		for (u, dep) in uses.iter().zip(deps) {
+			let r = match dep {
+				Ok(mut d) => match fetcher.check(&d) {
+					Ok(()) => d.add(false).await.map(|_| d),
+					Err(e) => Err(e),
+				},
+				Err(e) => Err(e),
+			};
+
+			match r {
+				Ok(d) => {
+					tally.change("Added", format_args!("{} {}", d.name, d.rev))?;
+					if d.is_flavor {
+						self.flavors.push(d);
+					} else {
+						self.plugins.push(d);
+					}
+				}
+				Err(e) => tally.fail(u, &e)?,
+			}
+			self.save().await?;
+		}
+
 		tally.finish("added")
 	}
 
@@ -43,13 +68,18 @@ impl Package {
 		tally.finish("deleted")
 	}
 
-	pub(crate) async fn install(&mut self, discard: bool) -> Result<()> {
+	pub(crate) async fn install(&mut self, discard: bool, jobs: NonZeroUsize) -> Result<()> {
 		let mut tally = Tally::default();
 		Tally::heading("Installing", self.plugins.len() + self.flavors.len())?;
 
+		let fetcher = Fetcher::run(self.plugins.iter().chain(&self.flavors), jobs).await;
+
 		macro_rules! go {
 			($dep:expr) => {
-				let r = $dep.install(discard).await;
+				let r = match fetcher.check(&$dep) {
+					Ok(()) => $dep.install(discard).await,
+					Err(e) => Err(e),
+				};
 				self.save().await?;
 				match r {
 					Ok(true) => tally.change("Installed", format_args!("{} {}", $dep.name, $dep.rev))?,
@@ -68,7 +98,12 @@ impl Package {
 		tally.finish("installed")
 	}
 
-	pub(crate) async fn upgrade_many(&mut self, uses: &[String], discard: bool) -> Result<()> {
+	pub(crate) async fn upgrade_many(
+		&mut self,
+		uses: &[String],
+		discard: bool,
+		jobs: NonZeroUsize,
+	) -> Result<()> {
 		let mut tally = Tally::default();
 		let selected = |d: &Dependency| uses.is_empty() || uses.contains(&d.r#use);
 		Tally::heading(
@@ -76,11 +111,25 @@ impl Package {
 			self.plugins.iter().chain(&self.flavors).filter(|d| selected(d)).count(),
 		)?;
 
+		// Pinned packages stay where they are, so their repositories are left alone.
+		let fetcher = Fetcher::run(
+			self.plugins.iter().chain(&self.flavors).filter(|d| selected(d) && !d.pinned()),
+			jobs,
+		)
+		.await;
+
 		macro_rules! go {
 			($dep:expr) => {
 				if selected(&$dep) {
 					let old = $dep.rev.clone();
-					let r = $dep.upgrade(discard).await;
+					let r = if $dep.pinned() {
+						Ok(false)
+					} else {
+						match fetcher.check(&$dep) {
+							Ok(()) => $dep.add(discard).await,
+							Err(e) => Err(e),
+						}
+					};
 					self.save().await?;
 					match r {
 						Ok(fresh) => tally.upgraded(&$dep, &old, fresh)?,
@@ -121,25 +170,20 @@ impl Package {
 		Ok(())
 	}
 
-	async fn add(&mut self, tally: &mut Tally, r#use: &str) -> Result<()> {
-		let mut dep = Dependency::from_str(r#use)?;
-		if let Some(d) = self.identical(&dep) {
+	/// Parses a package URL, rejecting it if package.toml or the rest of the same
+	/// batch already covers it.
+	fn resolve(&self, pending: &[Result<Dependency>], r#use: &str) -> Result<Dependency> {
+		let dep = Dependency::from_str(r#use)?;
+		if let Some(d) =
+			self.identical(&dep).or_else(|| pending.iter().flatten().find(|d| d.identical(&dep)))
+		{
 			bail!(
 				"{} `{}` already exists in package.toml",
 				if d.is_flavor { "Flavor" } else { "Plugin" },
 				dep.name
 			)
 		}
-
-		dep.add(false).await?;
-		tally.change("Added", format_args!("{} {}", dep.name, dep.rev))?;
-
-		if dep.is_flavor {
-			self.flavors.push(dep);
-		} else {
-			self.plugins.push(dep);
-		}
-		Ok(())
+		Ok(dep)
 	}
 
 	async fn delete(&mut self, tally: &mut Tally, r#use: &str, discard: bool) -> Result<()> {

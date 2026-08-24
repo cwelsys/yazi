@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 
 - Send terminal probe requests immediately at startup ([#4260])
 - Tune light/dark theme detection ([#4265])
+- Fetch `ya pkg` repositories concurrently, once each, with a new `-j`/`--jobs` option ([#])
 
 ## [v26.8.15]
 

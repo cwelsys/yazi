@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 
 ## [Unreleased]
 
+### Changed
+
+- Report `ya pkg` progress as one status line per package, instead of per-package banners and raw `git` output ([#])
+
 ### Fixed
 
 - Assertion failure on expanding URLs with variables containing absolute paths ([#4256])

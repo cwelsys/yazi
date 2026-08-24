@@ -1,30 +1,28 @@
 use anyhow::{Context, Result};
 use yazi_fs::{engine::{Engine, local::Local}, ok_or_not_found};
-use yazi_macro::outln;
 
-use super::Dependency;
+use super::{Dependency, Report};
 use crate::shared::{maybe_exists, remove_sealed};
 
 impl Dependency {
-	pub(super) async fn delete(&self, discard: bool) -> Result<()> {
-		self.header("Deleting package `{name}`")?;
-
+	/// Returns whether the package was there to delete.
+	pub(super) async fn delete(&self, discard: bool) -> Result<bool> {
 		let dir = self.target();
 		if !maybe_exists(&dir).await {
-			return Ok(outln!("Not found, skipping")?);
+			return Ok(false);
 		} else if !discard {
 			self.hash_check().await?;
 		}
 
 		self.delete_assets().await?;
 		if !self.delete_sources().await? {
-			outln!(
-				"For safety, user data will be preserved, manually delete them from: {}",
-				dir.display()
+			Report::noop(
+				"Preserved",
+				format_args!("user data in {}, delete it manually", dir.display()),
 			)?;
 		}
 
-		Ok(outln!("Done!")?)
+		Ok(true)
 	}
 
 	pub(super) async fn delete_assets(&self) -> Result<()> {

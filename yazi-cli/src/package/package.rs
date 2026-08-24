@@ -1,11 +1,11 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{fmt::Display, io, path::PathBuf, str::FromStr};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use yazi_fs::{Xdg, engine::{Engine, local::Local}};
 use yazi_macro::{ok_or_not_found, outln};
 
-use super::Dependency;
+use super::{Dependency, Report};
 
 #[derive(Default)]
 pub(crate) struct Package {
@@ -20,48 +20,41 @@ impl Package {
 	}
 
 	pub(crate) async fn add_many(&mut self, uses: &[String]) -> Result<()> {
+		let mut tally = Tally::default();
 		for u in uses {
-			let r = self.add(u).await;
+			let r = self.add(&mut tally, u).await;
 			self.save().await?;
-			r?;
+			if let Err(e) = r {
+				tally.fail(u, &e)?;
+			}
 		}
-		Ok(())
+		tally.finish("added")
 	}
 
 	pub(crate) async fn delete_many(&mut self, uses: &[String], discard: bool) -> Result<()> {
+		let mut tally = Tally::default();
 		for u in uses {
-			let r = self.delete(u, discard).await;
+			let r = self.delete(&mut tally, u, discard).await;
 			self.save().await?;
-			r?;
+			if let Err(e) = r {
+				tally.fail(u, &e)?;
+			}
 		}
-		Ok(())
+		tally.finish("deleted")
 	}
 
 	pub(crate) async fn install(&mut self, discard: bool) -> Result<()> {
+		let mut tally = Tally::default();
+		Tally::heading("Installing", self.plugins.len() + self.flavors.len())?;
+
 		macro_rules! go {
 			($dep:expr) => {
 				let r = $dep.install(discard).await;
 				self.save().await?;
-				r?;
-			};
-		}
-
-		for i in 0..self.plugins.len() {
-			go!(self.plugins[i]);
-		}
-		for i in 0..self.flavors.len() {
-			go!(self.flavors[i]);
-		}
-		Ok(())
-	}
-
-	pub(crate) async fn upgrade_many(&mut self, uses: &[String], discard: bool) -> Result<()> {
-		macro_rules! go {
-			($dep:expr) => {
-				if uses.is_empty() || uses.contains(&$dep.r#use) {
-					let r = $dep.upgrade(discard).await;
-					self.save().await?;
-					r?;
+				match r {
+					Ok(true) => tally.change("Installed", format_args!("{} {}", $dep.name, $dep.rev))?,
+					Ok(false) => tally.keep("Unchanged", format_args!("{} {}", $dep.name, $dep.rev))?,
+					Err(e) => tally.fail(&$dep.name, &e)?,
 				}
 			};
 		}
@@ -72,7 +65,38 @@ impl Package {
 		for i in 0..self.flavors.len() {
 			go!(self.flavors[i]);
 		}
-		Ok(())
+		tally.finish("installed")
+	}
+
+	pub(crate) async fn upgrade_many(&mut self, uses: &[String], discard: bool) -> Result<()> {
+		let mut tally = Tally::default();
+		let selected = |d: &Dependency| uses.is_empty() || uses.contains(&d.r#use);
+		Tally::heading(
+			"Upgrading",
+			self.plugins.iter().chain(&self.flavors).filter(|d| selected(d)).count(),
+		)?;
+
+		macro_rules! go {
+			($dep:expr) => {
+				if selected(&$dep) {
+					let old = $dep.rev.clone();
+					let r = $dep.upgrade(discard).await;
+					self.save().await?;
+					match r {
+						Ok(fresh) => tally.upgraded(&$dep, &old, fresh)?,
+						Err(e) => tally.fail(&$dep.name, &e)?,
+					}
+				}
+			};
+		}
+
+		for i in 0..self.plugins.len() {
+			go!(self.plugins[i]);
+		}
+		for i in 0..self.flavors.len() {
+			go!(self.flavors[i]);
+		}
+		tally.finish("upgraded")
 	}
 
 	pub(crate) fn print(&self) -> Result<()> {
@@ -97,7 +121,7 @@ impl Package {
 		Ok(())
 	}
 
-	async fn add(&mut self, r#use: &str) -> Result<()> {
+	async fn add(&mut self, tally: &mut Tally, r#use: &str) -> Result<()> {
 		let mut dep = Dependency::from_str(r#use)?;
 		if let Some(d) = self.identical(&dep) {
 			bail!(
@@ -108,6 +132,8 @@ impl Package {
 		}
 
 		dep.add(false).await?;
+		tally.change("Added", format_args!("{} {}", dep.name, dep.rev))?;
+
 		if dep.is_flavor {
 			self.flavors.push(dep);
 		} else {
@@ -116,12 +142,17 @@ impl Package {
 		Ok(())
 	}
 
-	async fn delete(&mut self, r#use: &str, discard: bool) -> Result<()> {
+	async fn delete(&mut self, tally: &mut Tally, r#use: &str, discard: bool) -> Result<()> {
 		let Some(dep) = self.identical(&Dependency::from_str(r#use)?).cloned() else {
 			bail!("`{}` was not found in package.toml", r#use)
 		};
 
-		dep.delete(discard).await?;
+		if dep.delete(discard).await? {
+			tally.change("Deleted", &dep.name)?;
+		} else {
+			tally.keep("Missing", &dep.name)?;
+		}
+
 		if dep.is_flavor {
 			self.flavors.retain(|d| !d.identical(&dep));
 		} else {
@@ -139,6 +170,70 @@ impl Package {
 
 	fn identical(&self, other: &Dependency) -> Option<&Dependency> {
 		self.plugins.iter().chain(&self.flavors).find(|d| d.identical(other))
+	}
+}
+
+/// Reports the outcome of each package as it lands, and totals them up at the
+/// end.
+#[derive(Default)]
+struct Tally {
+	changed:   usize,
+	unchanged: usize,
+	failed:    usize,
+}
+
+impl Tally {
+	fn heading(verb: &str, total: usize) -> io::Result<()> {
+		Report::done(verb, format_args!("{total} package{}", if total == 1 { "" } else { "s" }))
+	}
+
+	fn change(&mut self, verb: &str, body: impl Display) -> io::Result<()> {
+		self.changed += 1;
+		Report::done(verb, body)
+	}
+
+	fn keep(&mut self, verb: &str, body: impl Display) -> io::Result<()> {
+		self.unchanged += 1;
+		Report::noop(verb, body)
+	}
+
+	fn fail(&mut self, id: &str, e: &anyhow::Error) -> io::Result<()> {
+		self.failed += 1;
+		Report::fail("Failed", format_args!("{id}: {e:#}"))
+	}
+
+	fn upgraded(&mut self, dep: &Dependency, old: &str, fresh: bool) -> io::Result<()> {
+		if old.starts_with('=') {
+			self.keep("Pinned", format_args!("{} {old}", dep.name))
+		} else if fresh || old.is_empty() {
+			self.change("Installed", format_args!("{} {}", dep.name, dep.rev))
+		} else if old == dep.rev {
+			self.keep("Unchanged", format_args!("{} {old}", dep.name))
+		} else {
+			self.change("Upgraded", format_args!("{} {old} -> {}", dep.name, dep.rev))
+		}
+	}
+
+	fn finish(&self, changed: &str) -> Result<()> {
+		let mut parts = vec![];
+		if self.changed > 0 {
+			parts.push(format!("{} {changed}", self.changed));
+		}
+		if self.unchanged > 0 {
+			parts.push(format!("{} unchanged", self.unchanged));
+		}
+		if self.failed > 0 {
+			parts.push(format!("{} failed", self.failed));
+		}
+
+		Report::done("Finished", parts.join(", "))?;
+		if self.failed > 0 {
+			// Each failure was reported in full as it happened, so only the exit code is
+			// left to set.
+			std::process::exit(1);
+		}
+
+		Ok(())
 	}
 }
 

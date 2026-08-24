@@ -1,4 +1,4 @@
-use std::{env, io, path::{Path, PathBuf}, str::FromStr};
+use std::{path::{Path, PathBuf}, str::FromStr};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -42,26 +42,6 @@ impl Dependency {
 
 	pub(super) fn identical(&self, other: &Self) -> bool {
 		self.parent == other.parent && self.child == other.child
-	}
-
-	pub(super) fn header(&self, s: &str) -> Result<()> {
-		use std::io::IsTerminal;
-
-		use yazi_macro::writef;
-		use yazi_tty::sequence::{If, SetSgr};
-
-		let ansi = env::var_os("YA_FORCE_ANSI").is_some_and(|v| v == "1") || io::stdout().is_terminal();
-		writef!(
-			io::stdout(),
-			"\n{}{}{} {} {}{}\n\n",
-			If(ansi, SetSgr::Reverse),
-			If(ansi, SetSgr::Bold),
-			"  ",
-			s.replacen("{name}", &self.name, 1),
-			"  ",
-			If(ansi, SetSgr::Reset),
-		)?;
-		Ok(())
 	}
 
 	pub(super) async fn plugin_files(dir: &Path) -> Result<Vec<String>> {

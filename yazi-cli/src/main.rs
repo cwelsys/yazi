@@ -72,11 +72,11 @@ async fn run() -> anyhow::Result<()> {
 
 			let mut pkg = package::Package::load().await?;
 			match cmd {
-				CommandPkg::Add { ids } => pkg.add_many(&ids).await?,
+				CommandPkg::Add { ids, jobs } => pkg.add_many(&ids, jobs).await?,
 				CommandPkg::Delete { ids, discard } => pkg.delete_many(&ids, discard).await?,
-				CommandPkg::Install { discard } => pkg.install(discard).await?,
+				CommandPkg::Install { discard, jobs } => pkg.install(discard, jobs).await?,
 				CommandPkg::List => pkg.print()?,
-				CommandPkg::Upgrade { ids, discard } => pkg.upgrade_many(&ids, discard).await?,
+				CommandPkg::Upgrade { ids, discard, jobs } => pkg.upgrade_many(&ids, discard, jobs).await?,
 			}
 		}
 

@@ -1,4 +1,4 @@
-use std::{borrow::Cow, ffi::OsString};
+use std::{borrow::Cow, ffi::OsString, num::NonZeroUsize};
 
 use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
@@ -75,7 +75,10 @@ pub(super) enum CommandPkg {
 	Add {
 		/// Packages to add.
 		#[arg(index = 1, num_args = 1..)]
-		ids: Vec<String>,
+		ids:  Vec<String>,
+		/// Number of repositories to fetch at the same time.
+		#[arg(short, long, default_value_t = CommandPkg::JOBS)]
+		jobs: NonZeroUsize,
 	},
 	/// Delete packages.
 	#[command(arg_required_else_help = true)]
@@ -92,6 +95,9 @@ pub(super) enum CommandPkg {
 		/// Discard local changes made to packages while installing.
 		#[arg(long)]
 		discard: bool,
+		/// Number of repositories to fetch at the same time.
+		#[arg(short, long, default_value_t = CommandPkg::JOBS)]
+		jobs:    NonZeroUsize,
 	},
 	/// List all packages.
 	List,
@@ -103,7 +109,16 @@ pub(super) enum CommandPkg {
 		/// Discard local changes made to packages while upgrading.
 		#[arg(long)]
 		discard: bool,
+		/// Number of repositories to fetch at the same time.
+		#[arg(short, long, default_value_t = CommandPkg::JOBS)]
+		jobs:    NonZeroUsize,
 	},
+}
+
+impl CommandPkg {
+	/// Packages are deployed one by one, so this only bounds the Git round
+	/// trips, which are latency-bound rather than CPU-bound.
+	const JOBS: NonZeroUsize = NonZeroUsize::new(16).unwrap();
 }
 
 #[derive(clap::Args)]

@@ -29,6 +29,7 @@ yazi-version  = { path = "../yazi-version", version = "26.8.15" }
 # External dependencies
 anyhow       = { workspace = true }
 clap         = { workspace = true }
+futures      = { workspace = true }
 hashbrown    = { workspace = true }
 ratatui-core = { workspace = true }
 regex        = { workspace = true }

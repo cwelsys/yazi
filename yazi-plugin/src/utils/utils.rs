@@ -3,7 +3,7 @@ use yazi_binding::{Composer, ComposerSet};
 
 pub(super) struct Utils;
 
-pub fn compose(
+pub(crate) fn compose(
 	isolate: bool,
 ) -> Composer<impl Fn(&Lua, &[u8]) -> mlua::Result<Value>, ComposerSet> {
 	fn get(lua: &Lua, key: &[u8], isolate: bool) -> mlua::Result<Value> {
@@ -11,6 +11,7 @@ pub fn compose(
 			// App
 			b"id" => Utils::id(lua)?,
 			b"drop" => Utils::drop(lua)?,
+			b"hold" => Utils::hold(lua)?,
 
 			// Cache
 			b"file_cache" => Utils::file_cache(lua)?,

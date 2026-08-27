@@ -3,12 +3,12 @@ use hashbrown::HashMap;
 use indexmap::IndexSet;
 use mlua::Function;
 use parking_lot::RwLock;
-use yazi_boot::BOOT;
+use yazi_boot::{BOOT, ID};
 use yazi_fs::{FolderStage, file::FileCov};
 use yazi_shared::{id::Id, url::{Url, UrlBuf}};
 use yazi_shim::cell::RoCell;
 
-use crate::{Client, ID, PEERS, ember::{Ember, EmberBulkRename, EmberDuplicateItem, EmberHi, EmberMoveItem}};
+use crate::{Client, PEERS, ember::{Ember, EmberBulkRename, EmberDuplicateItem, EmberHi, EmberMoveItem}};
 
 pub static LOCAL: RoCell<RwLock<HashMap<String, HashMap<String, Function>>>> = RoCell::new();
 
@@ -119,7 +119,7 @@ impl Pubsub {
 		Ok(())
 	}
 
-	pub fn pub_inner_hi() -> bool {
+	pub(crate) fn pub_inner_hi() -> bool {
 		let abilities = REMOTE.read().keys().cloned().collect();
 		let abilities = BOOT.remote_events.union(&abilities).map(AsRef::as_ref);
 

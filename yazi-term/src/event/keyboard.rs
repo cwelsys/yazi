@@ -8,16 +8,16 @@ use crate::{ParseError, Result, bail, event::Modifiers};
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Serialize)]
 pub struct KeyEvent {
 	#[serde(flatten)]
-	pub code:      KeyCode,
-	pub kind:      KeyEventKind,
-	pub modifiers: Modifiers,
-	pub state:     KeyEventState,
+	pub code:         KeyCode,
+	pub kind:         KeyEventKind,
+	pub modifiers:    Modifiers,
+	pub(crate) state: KeyEventState,
 	#[serde(skip_serializing_if = "CompactString::is_empty")]
-	pub text:      CompactString,
+	pub(crate) text:  CompactString,
 }
 
 impl KeyEvent {
-	pub fn new(code: KeyCode, modifiers: Modifiers) -> Self {
+	pub(crate) fn new(code: KeyCode, modifiers: Modifiers) -> Self {
 		Self { code, modifiers, ..Default::default() }
 	}
 
@@ -116,6 +116,8 @@ pub enum KeyCode {
 
 impl KeyCode {
 	pub fn implies_shift(self) -> bool { matches!(self, Self::Char(c) if c.is_uppercase()) }
+
+	pub fn is_lock(self) -> bool { matches!(self, Self::CapsLock | Self::ScrollLock | Self::NumLock) }
 
 	pub(crate) fn from_xterm_modifier(r#final: u8) -> Result<Self> {
 		Ok(match r#final {

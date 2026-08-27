@@ -7,7 +7,7 @@ use yazi_shared::{path::PathBufDyn, url::UrlBuf};
 use yazi_shim::mlua::SER_OPT;
 use yazi_tty::TTY;
 
-pub fn compose() -> Composer<ComposerGet, ComposerSet> {
+pub(crate) fn compose() -> Composer<ComposerGet, ComposerSet> {
 	fn get(lua: &Lua, key: &[u8]) -> mlua::Result<Value> {
 		match key {
 			b"args" => args().into_lua(lua)?,
@@ -37,6 +37,7 @@ fn path() -> Composer<ComposerGet, ComposerSet> {
 	fn get(lua: &Lua, key: &[u8]) -> mlua::Result<Value> {
 		match key {
 			b"config_dir" => PathBufDyn::from(Xdg::config_dir()).into_lua(lua),
+			b"runtime_dir" => PathBufDyn::from(Xdg::runtime_dir()).into_lua(lua),
 			_ => Ok(Value::Nil),
 		}
 	}

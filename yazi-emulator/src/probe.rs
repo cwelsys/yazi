@@ -1,4 +1,4 @@
-use std::{fmt::Display, time::Duration};
+use std::{fmt::{self, Display}, time::Duration};
 
 use anyhow::{Result, bail};
 use tokio::{sync::Notify, time::{self, timeout}};
@@ -6,17 +6,23 @@ use yazi_macro::{error, writef};
 use yazi_shared::id::{Id, Ids};
 use yazi_shim::cell::SyncCell;
 use yazi_term::{TERM, event::{Event, Report}, stream::EventStream};
-use yazi_tty::{TTY, sequence::{ProbeClipboard, RequestBgColor, RequestCellPixelSize, RequestColorScheme, RequestCsiU, RequestCursorBlink, RequestCursorStyle, RequestDA1, RequestKittyGraphics, RequestXtVersion, RestoreCursorPos, SaveCursorPos, TmuxPassthrough}};
+use yazi_tty::{TTY, sequence::{EraseLine, ProbeClipboard, RequestBgColor, RequestCellPixelSize, RequestColorScheme, RequestCsiU, RequestCursorBlink, RequestCursorStyle, RequestDA1, RequestKgp, RequestKgpShm, RequestXtVersion, RestoreCursor, SaveCursor, TmuxPassthrough}};
 
 use crate::{Emulator, Mux};
 
 static IDS: Ids = Ids::new();
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Probe {
 	pub id:    SyncCell<Id>,
 	completed: SyncCell<bool>,
 	notifier:  Notify,
+}
+
+impl fmt::Debug for Probe {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.debug_struct("Probe").field("id", &self.id).field("completed", &self.completed).finish()
+	}
 }
 
 impl Probe {
@@ -31,7 +37,10 @@ impl Probe {
 		}
 	}
 
-	pub fn pending(&self) -> Option<Id> { (!self.completed.get()).then(|| self.id.get()) }
+	pub fn pending(&self) -> Option<Id> {
+		let id = self.id.get();
+		(id != Id::ZERO && !self.completed.get()).then_some(id)
+	}
 
 	pub async fn wait(&self, id: Id) {
 		loop {
@@ -48,7 +57,7 @@ impl Probe {
 		}
 	}
 
-	pub fn cancel(&self, id: Id) {
+	fn cancel(&self, id: Id) {
 		if self.id == id {
 			self.complete();
 		}
@@ -103,14 +112,17 @@ impl Emulator {
 	}
 
 	pub(super) fn request(&self) -> Result<()> {
-		let w = |t: &'static dyn Display| TmuxPassthrough(t, self.mux.get().is_some());
+		fn w<T: Display>(t: T, mux: bool) -> impl Display { TmuxPassthrough(t, mux) }
 
+		let mux = self.mux.get().is_some();
 		writef!(
 			TTY.writer(),
-			"{SaveCursorPos}{RequestColorScheme}{RequestBgColor}{RequestCursorBlink}{RequestCursorStyle}{}{}{RequestCellPixelSize}{ProbeClipboard}{RequestCsiU}{}{RestoreCursorPos}",
-			w(&RequestXtVersion),
-			w(&RequestKittyGraphics),
-			w(&RequestDA1),
+			"{SaveCursor}{RequestColorScheme}{RequestBgColor}{RequestCursorBlink}{RequestCursorStyle}{}{}{}{RequestCellPixelSize}{ProbeClipboard}{RequestCsiU}{}{}{RestoreCursor}",
+			w(RequestXtVersion, mux),
+			w(RequestKgp, mux),
+			w(RequestKgpShm::new(), mux),
+			w(RequestDA1, mux),
+			EraseLine::BeforeCursor
 		)?;
 
 		Ok(())

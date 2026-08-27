@@ -16,7 +16,7 @@ use crate::theme::{Flavor, Theme};
 pub static YAZI: RoCell<yazi::Yazi> = RoCell::new();
 pub static KEYMAP: RoCell<keymap::Keymap> = RoCell::new();
 pub static THEME: RoCell<Theme> = RoCell::new();
-pub static VFS: RoCell<vfs::Vfs> = RoCell::new();
+pub(crate) static VFS: RoCell<vfs::Vfs> = RoCell::new();
 pub static LAYOUT: SyncCell<Layout> = SyncCell::new(Layout::default());
 
 pub fn setup() -> anyhow::Result<()> {
@@ -79,9 +79,9 @@ where
 fn wait_for_key(e: anyhow::Error) -> anyhow::Result<()> {
 	let mut stdout = TTY.lockout();
 
-	write!(stdout, "{e}\r\n")?;
+	write!(stdout, "{}\r\n", e.to_string().replace('\n', "\r\n"))?;
 	if let Some(src) = e.source() {
-		write!(stdout, "\r\nCaused by:\r\n{src}\r\n")?;
+		write!(stdout, "\r\nCaused by:\r\n{}\r\n", src.to_string().replace('\n', "\r\n"))?;
 	}
 
 	writef!(

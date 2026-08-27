@@ -5,7 +5,7 @@ use arc_swap::ArcSwap;
 use yazi_macro::writef;
 use yazi_shim::cell::{RoCell, SyncCell};
 use yazi_term::{TERM, event::Report};
-use yazi_tty::{Handle, TTY, sequence::{EnterAlternateScreen, HideCursor, LeaveAlternateScreen, MoveTo, RestoreCursorPos, SaveCursorPos, ShowCursor}};
+use yazi_tty::{Handle, TTY, sequence::{HideCursor, MoveTo, RestoreCursorPos, SaveCursorPos, ShowCursor}};
 
 use crate::{Brand, Mux, Probe};
 
@@ -13,22 +13,23 @@ pub static EMULATOR: RoCell<Emulator> = RoCell::new();
 
 #[derive(Debug, Default)]
 pub struct Emulator {
-	pub brand:        SyncCell<Brand>,
-	pub version:      ArcSwap<String>,
-	pub csi_u:        SyncCell<Option<u8>>,
-	pub kgp:          SyncCell<bool>,
-	pub sixel:        SyncCell<bool>,
-	pub background:   SyncCell<Option<[u16; 3]>>,
-	pub color_scheme: SyncCell<Option<bool>>,
-	pub csi_16t:      SyncCell<(u16, u16)>,
-	pub force_16t:    SyncCell<bool>,
-	pub osc_5522:     SyncCell<bool>,
-	pub cursor_blink: SyncCell<bool>,
-	pub cursor_shape: SyncCell<Option<u8>>,
-	pub mux:          SyncCell<Option<Mux>>,
+	pub brand:            SyncCell<Brand>,
+	version:              ArcSwap<String>,
+	csi_u:                SyncCell<Option<u8>>,
+	pub kgp:              SyncCell<bool>,
+	pub kgp_shm:          SyncCell<bool>,
+	pub sixel:            SyncCell<bool>,
+	background:           SyncCell<Option<[u16; 3]>>,
+	color_scheme:         SyncCell<Option<bool>>,
+	pub(crate) csi_16t:   SyncCell<(u16, u16)>,
+	pub(crate) force_16t: SyncCell<bool>,
+	osc_5522:             SyncCell<bool>,
+	pub cursor_blink:     SyncCell<bool>,
+	pub cursor_shape:     SyncCell<Option<u8>>,
+	pub mux:              SyncCell<Option<Mux>>,
 
-	pub probe:          Probe,
-	pub(super) started: SyncCell<bool>,
+	pub probe: Probe,
+	started:   SyncCell<bool>,
 }
 
 impl Emulator {
@@ -43,10 +44,10 @@ impl Emulator {
 
 		TERM.setup()?;
 		TERM.enter_raw_mode()?;
-		writef!(TTY.writer(), "{EnterAlternateScreen}")?;
 
+		self.request()?;
 		self.probe.reset();
-		self.request()
+		Ok(())
 	}
 
 	pub fn stop(&self) {
@@ -54,7 +55,6 @@ impl Emulator {
 			return;
 		}
 
-		writef!(TTY.writer(), "{LeaveAlternateScreen}").ok();
 		TERM.source.wake().ok();
 		TERM.restorer.restore(&TTY);
 	}
@@ -66,10 +66,12 @@ impl Emulator {
 		self.brand.set(Brand::Unknown);
 		self.version.store(Default::default());
 		self.kgp.set(false);
+		self.kgp_shm.set(false);
 		self.sixel.set(false);
 
+		self.request()?;
 		self.probe.reset();
-		self.request()
+		Ok(())
 	}
 
 	pub fn apply(&self, report: &Report) {
@@ -90,7 +92,8 @@ impl Emulator {
 			}
 			Report::BackgroundColor(rgb) => self.background.set(Some(*rgb)),
 			Report::ColorScheme(light) => self.color_scheme.set(Some(*light)),
-			Report::KittyGraphics { id: 31, ok } => self.kgp.set(*ok),
+			Report::KittyGraphics { id: 278941603, ok } => self.kgp.set(*ok),
+			Report::KittyGraphics { id: 916472805, ok } => self.kgp_shm.set(*ok),
 			Report::Clipboard(supported) => self.osc_5522.set(*supported),
 			_ => {}
 		}

@@ -1,14 +1,14 @@
-use std::{borrow::Borrow, ffi::{OsStr, OsString}, fmt::{Display, Formatter}, ops::Deref};
+use std::{borrow::Borrow, ffi::{OsStr, OsString}, fmt::{Debug, Display, Formatter}, ops::Deref};
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
 pub struct NonEmptyString(String);
 
 impl NonEmptyString {
 	#[inline]
-	pub fn new(value: String) -> Option<Self> { Some(Self(value)).filter(|s| !s.is_empty()) }
+	fn new(value: String) -> Option<Self> { Some(Self(value)).filter(|s| !s.is_empty()) }
 }
 
 impl Deref for NonEmptyString {
@@ -40,6 +40,10 @@ impl AsRef<OsStr> for NonEmptyString {
 
 impl Display for NonEmptyString {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { Display::fmt(&self.0, f) }
+}
+
+impl Debug for NonEmptyString {
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result { Debug::fmt(&self.0, f) }
 }
 
 impl From<NonEmptyString> for String {

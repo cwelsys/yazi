@@ -18,25 +18,17 @@ pub struct Args {
 	#[arg(long)]
 	pub chooser_file: Option<PathBuf>,
 
-	/// Clear the cache directory (deprecated, use `ya cache clear`)
-	#[arg(long)]
-	pub clear_cache: bool, // TODO: remove
-
 	/// Use the specified client ID, must be a globally unique number
 	#[arg(long)]
-	pub client_id:     Option<Id>,
+	pub(crate) client_id:     Option<Id>,
 	/// Report the specified local events to stdout
 	#[arg(long)]
-	pub local_events:  Option<String>,
+	pub(crate) local_events:  Option<String>,
 	/// Report the specified remote events to stdout
 	#[arg(long)]
-	pub remote_events: Option<String>,
-
-	/// Print debug information (deprecated, use `ya env`)
-	#[arg(long)]
-	pub debug: bool, // TODO: remove
+	pub(crate) remote_events: Option<String>,
 
 	/// Print version
 	#[arg(short = 'V', long)]
-	pub version: bool,
+	pub(crate) version: bool,
 }

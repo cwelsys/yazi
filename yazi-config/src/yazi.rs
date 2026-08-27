@@ -7,18 +7,18 @@ use crate::{files, mgr, open, opener, plugin, popup, preview, tasks, which};
 
 #[derive(Deserialize, DeserializeOver, DeserializeOver1)]
 pub struct Yazi {
-	pub mgr:     mgr::Mgr,
+	pub mgr:            mgr::Mgr,
 	#[serde(default)]
-	pub files:   files::Files,
-	pub preview: preview::Preview,
-	pub opener:  opener::Opener,
-	pub open:    open::Open,
-	pub tasks:   tasks::Tasks,
-	pub plugin:  plugin::Plugin,
-	pub input:   popup::Input,
-	pub confirm: popup::Confirm,
-	pub pick:    popup::Pick,
-	pub which:   which::Which,
+	pub files:          files::Files,
+	pub preview:        preview::Preview,
+	pub opener:         opener::Opener,
+	pub open:           open::Open,
+	pub tasks:          tasks::Tasks,
+	pub plugin:         plugin::Plugin,
+	pub input:          popup::Input,
+	pub(crate) confirm: popup::Confirm,
+	pub pick:           popup::Pick,
+	pub which:          which::Which,
 }
 
 impl Yazi {

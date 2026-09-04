@@ -23,6 +23,9 @@ jobs:
             -d '{"ref":"main","inputs":{"names":"${{ github.event.repository.name }}"}}' \
             https://git.cwel.sh/api/v1/repos/cwel/pkg/actions/workflows/ci.yml/dispatches
 
+  # Upstream's tags come here so pkgver() can describe the fork; its branch
+  # does not, because a verbatim copy would run upstream's own workflows on
+  # this instance. nightly is a moving tag every recipe already excludes.
   upstream:
     if: ${{ github.event_name != 'push' }}
     runs-on: archlinux
@@ -30,21 +33,21 @@ jobs:
       - env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
-          pacman -Sy --noconfirm --needed --quiet git >/dev/null
           api=https://git.cwel.sh/api/v1/repos/${{ github.repository }}
           git clone -q --filter=blob:none --branch cwel https://git.cwel.sh/${{ github.repository }}.git fork && cd fork
           git config user.name bot && git config user.email bot@cwel.sh
           git config http.https://git.cwel.sh/.extraheader "Authorization: token $BOT_TOKEN"
           [ -z "$MIRROR" ] || git fetch -q "$MIRROR" '+refs/tags/*:refs/tags/*'
-          git remote add upstream "$UPSTREAM" && git fetch -q --force --tags upstream
+          git remote add upstream "$UPSTREAM"
           branch=$(git ls-remote --symref upstream HEAD | awk '/^ref:/ {sub("refs/heads/", "", $2); print $2}')
-          git push -q -f origin --tags "refs/remotes/upstream/$branch:refs/heads/$branch" || echo "could not update $branch or the tags"
+          git fetch -q upstream "+refs/heads/$branch:refs/remotes/upstream/$branch" '+refs/tags/*:refs/tags/*' '^refs/tags/nightly'
+          git push -q -f origin --tags || echo "could not update the tags"
           if git merge-base --is-ancestor "upstream/$branch" HEAD; then echo "cwel already carries upstream $branch"; exit 0; fi
           if git merge -q --no-ff -m "sync: merge upstream $branch" "upstream/$branch"; then git push -q origin cwel; exit 0; fi
           git diff --name-only --diff-filter=U
-          git merge --abort
-          git push -qf origin "upstream/$branch:refs/heads/sync/upstream"
+          git add -A && git commit -qm "sync: upstream $branch conflicts with our patches"
+          git push -qf origin HEAD:refs/heads/sync/upstream
           curl -sSf -o /dev/null -X POST -H "Authorization: token $BOT_TOKEN" -H 'Content-Type: application/json' \
-            -d '{"title":"sync: upstream conflicts with our patches","head":"sync/upstream","base":"cwel"}' "$api/pulls" ||
+            -d '{"title":"sync: upstream conflicts with our patches","head":"sync/upstream","base":"cwel","assignees":["${{ github.repository_owner }}"]}' "$api/pulls" ||
             echo "PR already open, sync/upstream refreshed"
           exit 1

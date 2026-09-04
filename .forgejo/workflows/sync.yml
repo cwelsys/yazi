@@ -18,7 +18,7 @@ jobs:
     runs-on: archlinux
     steps:
       - run: |
-          curl -sf -o /dev/null -X POST \
+          curl -sSf -o /dev/null -X POST \
             -H "Authorization: token ${{ secrets.BOT_TOKEN }}" -H 'Content-Type: application/json' \
             -d '{"ref":"main","inputs":{"names":"${{ github.event.repository.name }}"}}' \
             https://git.cwel.sh/api/v1/repos/cwel/pkg/actions/workflows/ci.yml/dispatches
@@ -35,16 +35,16 @@ jobs:
           git clone -q --filter=blob:none --branch cwel https://git.cwel.sh/${{ github.repository }}.git fork && cd fork
           git config user.name bot && git config user.email bot@cwel.sh
           git config http.https://git.cwel.sh/.extraheader "Authorization: token $BOT_TOKEN"
-          git remote add upstream "$UPSTREAM" && git fetch -q --tags upstream
+          [ -z "$MIRROR" ] || git fetch -q "$MIRROR" '+refs/tags/*:refs/tags/*'
+          git remote add upstream "$UPSTREAM" && git fetch -q --force --tags upstream
           branch=$(git ls-remote --symref upstream HEAD | awk '/^ref:/ {sub("refs/heads/", "", $2); print $2}')
-          [ -z "$MIRROR" ] || git fetch -q "$MIRROR" 'refs/tags/*:refs/tags/*'
-          git push -q origin --tags "refs/remotes/upstream/$branch:refs/heads/$branch" || echo "$branch or a tag did not fast-forward"
+          git push -q -f origin --tags "refs/remotes/upstream/$branch:refs/heads/$branch" || echo "could not update $branch or the tags"
           if git merge-base --is-ancestor "upstream/$branch" HEAD; then echo "cwel already carries upstream $branch"; exit 0; fi
           if git merge -q --no-ff -m "sync: merge upstream $branch" "upstream/$branch"; then git push -q origin cwel; exit 0; fi
           git diff --name-only --diff-filter=U
           git merge --abort
           git push -qf origin "upstream/$branch:refs/heads/sync/upstream"
-          curl -sf -o /dev/null -X POST -H "Authorization: token $BOT_TOKEN" -H 'Content-Type: application/json' \
+          curl -sSf -o /dev/null -X POST -H "Authorization: token $BOT_TOKEN" -H 'Content-Type: application/json' \
             -d '{"title":"sync: upstream conflicts with our patches","head":"sync/upstream","base":"cwel"}' "$api/pulls" ||
             echo "PR already open, sync/upstream refreshed"
           exit 1

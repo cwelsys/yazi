@@ -16,12 +16,12 @@ fn file(name: &str) -> File {
 /// Hides anything whose last path segment is `secret`.
 fn hiding_secret() -> ExcludeFilter {
 	ExcludeFilter::new(Arc::new(|url, _is_dir| {
-		Some(url.loc().display().to_string().ends_with("secret")).filter(|&b| b)
+		Some(url.loc().to_string_lossy().ends_with("secret")).filter(|&b| b)
 	}))
 }
 
 fn visible(entries: &Entries) -> Vec<String> {
-	entries.iter().map(|f| f.url.loc().display().to_string()).collect()
+	entries.iter().map(|f| f.url.loc().to_string_lossy().into_owned()).collect()
 }
 
 fn loaded() -> Entries {

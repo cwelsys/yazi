@@ -10,7 +10,7 @@ on:
 env:
   UPSTREAM: https://github.com/sxyazi/yazi.git
   # a mirror that cuts its own release tags, or empty
-  MIRROR: 
+  MIRROR:
 
 jobs:
   build:
@@ -33,7 +33,6 @@ jobs:
       - env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
-          api=https://git.cwel.sh/api/v1/repos/${{ github.repository }}
           git clone -q --filter=blob:none --branch cwel https://git.cwel.sh/${{ github.repository }}.git fork && cd fork
           git config user.name bot && git config user.email bot@cwel.sh
           git config http.https://git.cwel.sh/.extraheader "Authorization: token $BOT_TOKEN"
@@ -42,12 +41,18 @@ jobs:
           branch=$(git ls-remote --symref upstream HEAD | awk '/^ref:/ {sub("refs/heads/", "", $2); print $2}')
           git fetch -q upstream "+refs/heads/$branch:refs/remotes/upstream/$branch" '+refs/tags/*:refs/tags/*' '^refs/tags/nightly'
           git push -q -f origin --tags || echo "could not update the tags"
-          if git merge-base --is-ancestor "upstream/$branch" HEAD; then echo "cwel already carries upstream $branch"; exit 0; fi
-          if git merge -q --no-ff -m "sync: merge upstream $branch" "upstream/$branch"; then git push -q origin cwel; exit 0; fi
-          git diff --name-only --diff-filter=U
-          git add -A && git commit -qm "sync: upstream $branch conflicts with our patches"
-          git push -qf origin HEAD:refs/heads/sync/upstream
-          curl -sSf -o /dev/null -X POST -H "Authorization: token $BOT_TOKEN" -H 'Content-Type: application/json' \
-            -d '{"title":"sync: upstream conflicts with our patches","head":"sync/upstream","base":"cwel","assignees":["${{ github.repository_owner }}"]}' "$api/pulls" ||
-            echo "PR already open, sync/upstream refreshed"
-          exit 1
+          api=https://git.cwel.sh/api/v1/repos/${{ github.repository }}/issues
+          title="sync: upstream conflicts with our patches"
+          open=$(curl -sSf -H "Authorization: token $BOT_TOKEN" "$api?state=open&type=issues" | jq --arg t "$title" '.[] | select(.title == $t) | .number')
+          if git merge-base --is-ancestor "upstream/$branch" HEAD; then echo "cwel already carries upstream $branch"
+          elif git merge -q --no-ff -m "sync: merge upstream $branch" "upstream/$branch"; then git push -q origin cwel
+          else
+            files=$(git diff --name-only --diff-filter=U); echo "$files"
+            body=$(printf '`git merge upstream/%s`\n\n```\n%s\n```' "$branch" "$files")
+            [ -n "$open" ] || curl -sSf -o /dev/null -X POST -H "Authorization: token $BOT_TOKEN" -H 'Content-Type: application/json' \
+              -d "$(jq -n --arg t "$title" --arg b "$body" --arg a '${{ github.repository_owner }}' '{title: $t, body: $b, assignees: [$a]}')" "$api"
+            exit 1
+          fi
+          for n in $open; do
+            curl -sSf -o /dev/null -X PATCH -H "Authorization: token $BOT_TOKEN" -H 'Content-Type: application/json' -d '{"state":"closed"}' "$api/$n"
+          done

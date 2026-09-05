@@ -61,32 +61,22 @@ impl Git {
 				Path::from_wtf8(&ent[tab + 1..]).context("Git path cannot be represented by the OS")?,
 			);
 
-			// Clones made without `core.symlinks=false` hold a real symlink here, while the
-			// ones made with it hold a regular file spelling out the target path.
-			let meta = fs::symlink_metadata(&link)
-				.await
-				.with_context(|| format!("failed to stat Git symlink `{}`", link.display()))?;
-
-			let target = if meta.is_symlink() {
-				fs::read_link(&link).await?
+			let is_symlink = fs::symlink_metadata(&link).await?.file_type().is_symlink();
+			let original = if is_symlink {
+				fs::read_link(&link).await? // TODO: compat for old caches, remove in the future
 			} else {
 				PathBuf::from_wtf8_vec(fs::read(&link).await?)
 					.context("Git symlink origin cannot be represented by the OS")?
 			};
-
-			let original = fs::canonicalize(link.parent().unwrap_or(&path).join(target))
+			let original = fs::canonicalize(link.parent().unwrap_or(&path).join(original))
 				.await
 				.with_context(|| format!("failed to resolve Git symlink target `{}`", link.display()))?;
 
 			if !original.starts_with(&path) {
 				bail!("Git symlink target escapes repository: `{}`", link.display());
+			} else if is_symlink {
+				fs::remove_file(&link).await?;
 			}
-
-			// Unlink first, so that copying onto a real symlink doesn't write through to
-			// its target.
-			fs::remove_file(&link)
-				.await
-				.with_context(|| format!("failed to remove `{}`", link.display()))?;
 
 			fs::copy(original, &link)
 				.await

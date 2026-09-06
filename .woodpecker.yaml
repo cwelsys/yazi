@@ -44,16 +44,15 @@ steps:
       - git push -q "$origin" HEAD:cwel
 
   - name: build
-    image: woodpeckerci/plugin-trigger
+    image: git.cwel.sh/cwel/archlinux
     when:
       event: push
-    settings:
-      repositories:
-        - cwel/pkg
-      params:
-        - NAME=${CI_REPO_NAME}
-      token:
+    environment:
+      WOODPECKER_TOKEN:
         from_secret: WOODPECKER_TOKEN
+    commands:
+      - 'id=$(curl -sSf -H "Authorization: Bearer $WOODPECKER_TOKEN" ${CI_SYSTEM_URL}/api/repos/lookup/cwel/pkg | jq .id)'
+      - 'curl -sSf -o /dev/null -X POST -H "Authorization: Bearer $WOODPECKER_TOKEN" -H "Content-Type: application/json" -d ''{"branch":"main","variables":{"NAME":"${CI_REPO_NAME}"}}'' ${CI_SYSTEM_URL}/api/repos/$id/pipelines'
 
   - name: red
     image: codeberg.org/l-x/woodpecker-ntfy

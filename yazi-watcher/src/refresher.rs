@@ -1,21 +1,16 @@
-use std::{io, ops::Deref, time::{Duration, Instant}};
+use std::{io, mem, ops::Deref, time::Duration};
 
 use hashbrown::{HashMap, hash_map::RawEntryMut};
-use indexmap::{IndexMap, IndexSet};
-use tokio::sync::mpsc;
-use yazi_fs::{Entries, FilesOp, file::{File, FileCov}};
-use yazi_shared::url::{UrlBuf, UrlCov, UrlLike, UrlMapExt};
+use indexmap::IndexSet;
+use tokio::{pin, sync::mpsc, task::JoinHandle};
+use tokio_stream::{StreamExt, wrappers::UnboundedReceiverStream};
+use yazi_fs::{Entries, file::File, op::{FILES_TICKET, FilesOp}};
+use yazi_shared::{id::Id, url::{UrlBuf, UrlLike, UrlMapExt}};
 use yazi_vfs::VfsEntries;
 
 #[derive(Clone)]
 pub struct Refresher {
 	tx: mpsc::UnboundedSender<Op>,
-}
-
-enum Op {
-	Sync(IndexSet<FileCov>),
-	Refresh(IndexMap<FileCov, bool>),
-	Done(Entry, io::Result<Option<Vec<File>>>),
 }
 
 impl Refresher {
@@ -32,7 +27,7 @@ impl Refresher {
 				tokio::select! {
 					Some(op) = rx.recv() => me_.handle(op, &mut entries).await,
 					_ = interval.tick() => {
-						for (_, entry) in entries.iter_mut().filter(|(u, _)| u.kind().is_virtual()) {
+						for (_, entry) in entries.iter_mut().filter(|(u, _)| !u.auth().is_local()) {
 							entry.dirty = true;
 							me_.spawn(entry);
 						}
@@ -47,122 +42,171 @@ impl Refresher {
 	async fn handle(&self, op: Op, entries: &mut HashMap<UrlBuf, Entry>) {
 		match op {
 			Op::Sync(files) => {
-				entries.retain(|url, _| files.contains(&UrlCov::new(url)));
+				entries.retain(|url, _| files.contains(url));
 				for file in files {
-					entries.get_or_insert_with(file.0, |file| Entry { file, ..Default::default() });
+					entries.get_or_insert_with(file, Entry::new);
 				}
 			}
-			Op::Refresh(requests) => {
-				for (FileCov(file), force) in requests {
-					let entry = match entries.raw_entry_mut().from_key(&file.url) {
-						RawEntryMut::Occupied(mut oe) => {
-							oe.get_mut().file = file;
-							oe.into_mut()
-						}
-						RawEntryMut::Vacant(ve) => {
-							ve.insert(file.url.to_owned(), Entry { file, ..Default::default() }).1
-						}
-					};
+			Op::Load(file) => {
+				let entry = match entries.raw_entry_mut().from_key(&file.url) {
+					RawEntryMut::Occupied(oe) if oe.get().busy != Id::ZERO => {
+						oe.into_mut().file = file;
+						return;
+					}
+					RawEntryMut::Occupied(mut oe) => {
+						oe.get_mut().file = file;
+						oe.into_mut()
+					}
+					RawEntryMut::Vacant(ve) => ve.insert(file.to_url(), Entry::new(file)).1,
+				};
 
-					(entry.dirty, entry.report, entry.force) = (true, true, entry.force || force);
-					self.spawn(entry);
-				}
+				(entry.dirty, entry.report, entry.force, entry.stream) = (true, true, true, true);
+				self.spawn(entry);
 			}
-			Op::Done(prev, result) => {
+			Op::Refresh { file, force } => {
+				let entry = match entries.raw_entry_mut().from_key(&file.url) {
+					RawEntryMut::Occupied(oe) if !force && oe.get().busy != Id::ZERO => {
+						oe.into_mut().file = file;
+						return;
+					}
+					RawEntryMut::Occupied(mut oe) => {
+						oe.get_mut().file = file;
+						oe.into_mut()
+					}
+					RawEntryMut::Vacant(ve) => ve.insert(file.to_url(), Entry::new(file)).1,
+				};
+
+				(entry.dirty, entry.report, entry.force, entry.stream) =
+					(true, true, entry.force || force, false);
+				self.spawn(entry);
+			}
+			Op::Done(mut prev, result) => {
 				let Some(entry) = entries.get_mut(&prev.url) else { return };
 				if entry.busy != prev.busy {
 					return;
 				}
+				if result.is_err() {
+					entry.force = true;
+				}
 
 				match result {
-					Ok(Some(files)) => {
+					Ok(RefreshResponse::Full(files)) => {
 						entry.file = prev.file.clone();
-						FilesOp::Full(prev.file, files).emit();
+						FilesOp::Full(mem::take(&mut prev.file), files).emit();
 					}
-					Ok(None) => {}
+					Ok(RefreshResponse::Part) => {
+						entry.file = prev.file.clone();
+						FilesOp::Done(mem::take(&mut prev.file), prev.busy).emit();
+					}
+					Ok(RefreshResponse::Skip) => {}
 					Err(e) if e.kind() == io::ErrorKind::NotFound => {
-						if let Some((t, n)) = prev.url.pair() {
-							FilesOp::Deleting(t.into(), [n.into()].into()).emit();
+						if let Some((t, n)) = prev.pair() {
+							FilesOp::Delete(t.into(), [n.into()].into()).emit();
+						} else if prev.report {
+							FilesOp::Fail(mem::take(&mut prev.file.url), e.into()).emit();
 						}
 					}
 					Err(e) if prev.report => {
-						FilesOp::IOErr(prev.file.url, e.into()).emit();
+						FilesOp::Fail(mem::take(&mut prev.file.url), e.into()).emit();
 					}
-					Err(e) => yazi_macro::debug!("Failed to refresh {:?}: {e:?}", prev.url),
+					Err(e) => yazi_macro::debug!("Failed to refresh {}: {e:?}", prev.url),
 				}
 
-				entry.busy = None;
+				entry.busy = Id::ZERO;
 				self.spawn(entry); // A new request may have arrived while this entry was busy.
 			}
 		}
 	}
 
 	fn spawn(&self, entry: &mut Entry) {
-		if entry.busy.is_some() || !entry.dirty {
+		if !entry.dirty || entry.busy != Id::ZERO {
 			return;
 		}
 
 		let (tx, mut prev) = (self.tx.clone(), entry.turn());
-		tokio::spawn(async move {
+		entry.handle = Some(tokio::spawn(async move {
 			let result = async {
-				Ok(if prev.force {
-					Some(Entries::from_dir_bulk(&prev.file.url).await?)
-				} else if let Some(file) = Entries::revalidate(&prev.file).await? {
+				if let Some(file) = Entries::revalidate(&prev.file).await? {
 					prev.file = file;
-					Some(Entries::from_dir_bulk(&prev.url).await?)
+				} else if !prev.force {
+					return Ok(RefreshResponse::Skip);
+				}
+
+				if prev.stream {
+					Self::spawn_part(&mut prev).await
 				} else {
-					None
-				})
+					Self::spawn_full(&mut prev).await
+				}
 			}
 			.await;
 			tx.send(Op::Done(prev, result)).ok();
-		});
+		}));
+	}
+
+	async fn spawn_full(prev: &mut Entry) -> io::Result<RefreshResponse> {
+		Ok(RefreshResponse::Full(Entries::from_dir_bulk(&prev.url).await?))
+	}
+
+	async fn spawn_part(prev: &mut Entry) -> io::Result<RefreshResponse> {
+		FilesOp::Part(prev.to_url(), vec![], prev.busy).emit();
+
+		let rx = UnboundedReceiverStream::new(Entries::from_dir(&prev.url).await?)
+			.chunks_timeout(5000, Duration::from_millis(500));
+		pin!(rx);
+
+		while let Some(chunk) = rx.next().await {
+			FilesOp::Part(prev.to_url(), chunk, prev.busy).emit();
+		}
+		Ok(RefreshResponse::Part)
 	}
 }
 
 impl Refresher {
-	pub(super) fn sync(&self, files: IndexSet<FileCov>) { self.tx.send(Op::Sync(files)).ok(); }
+	pub(super) fn sync(&self, files: IndexSet<File>) { self.tx.send(Op::Sync(files)).ok(); }
 
-	pub fn refresh<I>(&self, requests: I)
+	pub fn load(&self, file: impl Into<File>) { self.tx.send(Op::Load(file.into())).ok(); }
+
+	pub fn request<I>(&self, ops: I)
 	where
 		I: IntoIterator,
-		I::Item: Into<RefreshRequest>,
+		I::Item: Into<Op>,
 	{
-		let mut files = IndexMap::new();
-		for request in requests.into_iter().map(Into::into) {
-			files
-				.entry(FileCov(request.file))
-				.and_modify(|force| *force |= request.force)
-				.or_insert(request.force);
+		for op in ops {
+			self.tx.send(op.into()).ok();
 		}
-		self.tx.send(Op::Refresh(files)).ok();
 	}
+
+	pub fn shutdown(&self) { self.sync(IndexSet::new()); }
 }
 
-// --- RefreshRequest
-pub struct RefreshRequest {
-	pub file:  File,
-	pub force: bool,
+pub enum Op {
+	Sync(IndexSet<File>),
+	Load(File),
+	Refresh { file: File, force: bool },
+	Done(Entry, io::Result<RefreshResponse>),
 }
 
-impl Deref for RefreshRequest {
-	type Target = File;
-
-	fn deref(&self) -> &Self::Target { &self.file }
+impl Op {
+	pub fn is_force(&self) -> bool { matches!(self, Self::Refresh { force: true, .. }) }
 }
 
-impl RefreshRequest {
-	pub fn force(file: impl Into<File>) -> Self { Self { file: file.into(), force: true } }
+// --- Response
+pub enum RefreshResponse {
+	Full(Vec<File>),
+	Part,
+	Skip,
 }
 
 // --- Entry
-#[derive(Clone, Default)]
-struct Entry {
+#[derive(Default)]
+pub struct Entry {
 	file:   File,
-	busy:   Option<Instant>,
+	busy:   Id,
 	dirty:  bool,
 	report: bool,
 	force:  bool,
+	stream: bool,
+	handle: Option<JoinHandle<()>>,
 }
 
 impl Deref for Entry {
@@ -171,12 +215,28 @@ impl Deref for Entry {
 	fn deref(&self) -> &Self::Target { &self.file }
 }
 
-impl Entry {
-	fn turn(&mut self) -> Self {
-		self.busy = Some(Instant::now());
-		let me = self.clone();
+impl Drop for Entry {
+	fn drop(&mut self) { self.handle.take().map(|h| h.abort()); }
+}
 
-		(self.dirty, self.report, self.force) = (false, false, false);
+impl Entry {
+	fn new(file: File) -> Self {
+		let mut me = Self::default();
+		me.file = file;
 		me
+	}
+
+	fn turn(&mut self) -> Self {
+		self.busy = FILES_TICKET.next();
+
+		Self {
+			file:   self.file.clone(),
+			busy:   self.busy,
+			dirty:  mem::take(&mut self.dirty),
+			report: mem::take(&mut self.report),
+			force:  mem::take(&mut self.force),
+			stream: mem::take(&mut self.stream),
+			handle: None,
+		}
 	}
 }

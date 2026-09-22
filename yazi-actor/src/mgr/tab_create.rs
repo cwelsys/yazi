@@ -1,11 +1,11 @@
 use anyhow::Result;
 use yazi_core::{mgr::CdSource, tab::Tab};
-use yazi_macro::{act, render, succ};
+use yazi_macro::{render, succ};
 use yazi_parser::mgr::TabCreateForm;
 use yazi_scheduler::NotifyProxy;
 use yazi_shared::{data::Data, url::UrlLike};
 
-use crate::{Actor, Ctx};
+use crate::{Actor, Ctx, act};
 
 const MAX_TABS: usize = 9;
 
@@ -29,8 +29,8 @@ impl Actor for TabCreate {
 			(true, target)
 		} else if let Some(h) = cx.hovered() {
 			tab.pref = cx.tab().pref.clone();
-			(false, h.url.clone())
-		} else if !cx.cwd().is_search() {
+			(false, h.to_url())
+		} else if !cx.cwd().is_view() {
 			tab.pref = cx.tab().pref.clone();
 			(true, cx.cwd().clone())
 		} else if let Some(u) = tab.backstack.current().cloned() {
@@ -38,7 +38,7 @@ impl Actor for TabCreate {
 			(true, u)
 		} else {
 			tab.pref = cx.tab().pref.clone();
-			(true, tab.cwd().to_regular()?)
+			(true, tab.cwd().clone())
 		};
 
 		let tabs = &mut cx.mgr.tabs;

@@ -7,7 +7,7 @@ use tokio::io::AsyncWriteExt;
 use yazi_binding::Permit;
 use yazi_config::{YAZI, opener::OpenerRuleArc};
 use yazi_dds::Pubsub;
-use yazi_fs::{FilesOp, Splatter, engine::{Engine, FileBuilder, local::Local}, max_common_root, path::skip_url};
+use yazi_fs::{Splatter, engine::{Engine, FileBuilder, local::Local}, max_common_root, op::FilesOp, path::skip_url};
 use yazi_macro::{log_if_err, succ, writef};
 use yazi_parser::VoidForm;
 use yazi_proxy::TasksProxy;
@@ -134,7 +134,7 @@ impl BulkRename {
 		}
 
 		if !succeeded.is_empty() {
-			let it = succeeded.iter().map(|(o, n)| (o.as_url(), n.url.as_url()));
+			let it = succeeded.iter().map(|(o, n)| (o.as_url(), n.as_url()));
 			log_if_err!(Pubsub::pub_after_bulk_rename(it));
 			FilesOp::rename(succeeded);
 		}
@@ -154,7 +154,7 @@ impl BulkRename {
 	}
 
 	fn replace_url(url: &UrlBuf, take: usize, rep: &StrandBuf) -> Result<UrlBuf> {
-		Ok(url.try_replace(take, PathDyn::with(url.kind(), rep)?)?.into_owned())
+		Ok(url.try_replace(take, PathDyn::with(url.loc().kind(), rep)?)?.into_owned())
 	}
 
 	fn ask_continue(todo: &[(Tuple, Tuple)], decision: Option<bool>) -> Result<bool> {

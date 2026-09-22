@@ -17,7 +17,12 @@ pub struct FilesSorter {
 }
 
 impl FilesSorter {
-	pub(super) fn sort(&self, items: &mut [File], sizes: &HashMap<PathBufDyn, u64>) {
+	pub(super) fn sort(
+		&self,
+		items: &mut [File],
+		sizes: &HashMap<PathBufDyn, u64>,
+		ranks: &HashMap<PathBufDyn, i64>,
+	) {
 		if items.is_empty() {
 			return;
 		}
@@ -45,8 +50,8 @@ impl FilesSorter {
 			}),
 			SortBy::Extension => items.sort_unstable_by(|a, b| {
 				promote!(a, b);
-				let aa = a.url.ext().filter(|_| a.is_file());
-				let bb = b.url.ext().filter(|_| b.is_file());
+				let aa = a.ext().filter(|_| a.is_file());
+				let bb = b.ext().filter(|_| b.is_file());
 				let ord = if self.sensitive {
 					self.cmp(aa, bb)
 				} else {
@@ -78,6 +83,12 @@ impl FilesSorter {
 					self.cmp(rng.next_u64(), rng.next_u64())
 				})
 			}
+			SortBy::Custom => items.sort_unstable_by(|a, b| {
+				promote!(a, b);
+				let aa = ranks.get(&a.key()).copied().unwrap_or_default();
+				let bb = ranks.get(&b.key()).copied().unwrap_or_default();
+				self.fallback(a, b, self.cmp(aa, bb))
+			}),
 		}
 	}
 

@@ -1,6 +1,6 @@
 yazi_macro::mod_pub!(files keymap mgr open opener plugin popup preview tasks theme vfs which);
 
-yazi_macro::mod_flat!(icon inject layout mixing pattern platform preset priority selectable selector tests yazi);
+yazi_macro::mod_flat!(icon layout mixing pattern platform preset priority selectable selector tests yazi);
 
 use std::io::Write;
 
@@ -16,7 +16,7 @@ use crate::theme::{Flavor, Theme};
 pub static YAZI: RoCell<yazi::Yazi> = RoCell::new();
 pub static KEYMAP: RoCell<keymap::Keymap> = RoCell::new();
 pub static THEME: RoCell<Theme> = RoCell::new();
-pub(crate) static VFS: RoCell<vfs::Vfs> = RoCell::new();
+pub static VFS: RoCell<vfs::Vfs> = RoCell::new();
 pub static LAYOUT: SyncCell<Layout> = SyncCell::new(Layout::default());
 
 pub fn setup() -> anyhow::Result<()> {
@@ -49,7 +49,7 @@ fn try_init(merge: bool) -> anyhow::Result<()> {
 	YAZI.init(yazi);
 	KEYMAP.init(keymap);
 	VFS.init(vfs);
-	THEME.init(theme.reshape(false)?);
+	THEME.init(theme.reshape(false));
 	Ok(())
 }
 
@@ -66,7 +66,7 @@ pub fn build_flavor(light: bool) -> anyhow::Result<Theme> {
 		error_with_input(preset.deserialize_over_with(toml::de::Deserializer::from(theme)), &theme_str),
 	)?;
 
-	preset.reshape(light)
+	Ok(preset.reshape(light))
 }
 
 fn parse<T, E>(name: &str, result: Result<T, E>) -> anyhow::Result<T>

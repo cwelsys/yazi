@@ -1,21 +1,21 @@
-use std::{env, path::PathBuf, sync::OnceLock};
+use std::{env, path::PathBuf, sync::LazyLock};
 
-use yazi_macro::unix_either;
+use yazi_shim::Uzers;
 
 pub struct Xdg;
 
 impl Xdg {
 	pub(super) fn load() {
 		Self::config_dir();
-		Self::cache_dir();
+		Self::asset_dir();
 		Self::state_dir();
 		Self::runtime_dir();
 		Self::temp_dir();
 	}
 
 	pub fn config_dir() -> &'static PathBuf {
-		static ONCE: OnceLock<PathBuf> = OnceLock::new();
-		ONCE.get_or_init(Self::load_config_dir)
+		static DIR: LazyLock<PathBuf> = LazyLock::new(Xdg::load_config_dir);
+		&DIR
 	}
 
 	fn load_config_dir() -> PathBuf {
@@ -40,15 +40,15 @@ impl Xdg {
 		}
 	}
 
-	pub fn cache_dir() -> &'static PathBuf {
-		static ONCE: OnceLock<PathBuf> = OnceLock::new();
-		ONCE.get_or_init(Self::load_cache_dir)
+	pub fn asset_dir() -> &'static PathBuf {
+		static DIR: LazyLock<PathBuf> = LazyLock::new(Xdg::load_asset_dir);
+		&DIR
 	}
 
-	fn load_cache_dir() -> PathBuf {
+	fn load_asset_dir() -> PathBuf {
 		#[cfg(windows)]
 		{
-			dirs::cache_dir().map(|p| p.join("yazi")).expect("Failed to get cache directory")
+			dirs::cache_dir().map(|p| p.join("yazi")).expect("Failed to get asset directory")
 		}
 		#[cfg(unix)]
 		{
@@ -57,13 +57,13 @@ impl Xdg {
 				.filter(|p| p.is_absolute())
 				.map(|p| p.join("yazi"))
 				.or_else(|| dirs::home_dir().map(|h| h.join(".cache/yazi")))
-				.expect("Failed to get cache directory")
+				.expect("Failed to get asset directory")
 		}
 	}
 
 	pub fn state_dir() -> &'static PathBuf {
-		static ONCE: OnceLock<PathBuf> = OnceLock::new();
-		ONCE.get_or_init(Self::load_state_dir)
+		static DIR: LazyLock<PathBuf> = LazyLock::new(Xdg::load_state_dir);
+		&DIR
 	}
 
 	fn load_state_dir() -> PathBuf {
@@ -83,8 +83,8 @@ impl Xdg {
 	}
 
 	pub fn runtime_dir() -> &'static PathBuf {
-		static ONCE: OnceLock<PathBuf> = OnceLock::new();
-		ONCE.get_or_init(Self::load_runtime_dir)
+		static DIR: LazyLock<PathBuf> = LazyLock::new(Xdg::load_runtime_dir);
+		&DIR
 	}
 
 	fn load_runtime_dir() -> PathBuf {
@@ -93,36 +93,20 @@ impl Xdg {
 			.filter(|p| p.is_absolute())
 			.unwrap_or_else(env::temp_dir);
 
-		let uid = unix_either!(
-			{
-				use uzers::Users;
-				yazi_shared::USERS_CACHE.get_current_uid()
-			},
-			0
-		);
-
-		p.push(format!("yazi+{uid}"));
+		p.push(format!("yazi+{}", Uzers::uid_or_zero()));
 		p
 	}
 
 	pub fn temp_dir() -> &'static PathBuf {
-		static ONCE: OnceLock<PathBuf> = OnceLock::new();
-		ONCE.get_or_init(Self::load_temp_dir)
+		static DIR: LazyLock<PathBuf> = LazyLock::new(Xdg::load_temp_dir);
+		&DIR
 	}
 
 	fn load_temp_dir() -> PathBuf {
 		let mut p = env::temp_dir();
 		assert!(p.is_absolute(), "Temporary directory path is not absolute");
 
-		let uid = unix_either!(
-			{
-				use uzers::Users;
-				yazi_shared::USERS_CACHE.get_current_uid()
-			},
-			0
-		);
-
-		p.push(format!("yazi-{uid}"));
+		p.push(format!("yazi-{}", Uzers::uid_or_zero()));
 		p
 	}
 }

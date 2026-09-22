@@ -1,5 +1,5 @@
 use tokio::sync::mpsc;
-use yazi_shared::{auth::AuthKind, url::{AsUrl, Url, UrlBuf, UrlCow, UrlLike}};
+use yazi_shared::url::{Url, UrlBuf, UrlCow, UrlLike};
 
 use crate::{WATCHED, local::LINKED, r#virtual::VirtualReport};
 
@@ -16,11 +16,10 @@ impl Reporter {
 		I::Item: Into<UrlCow<'a>>,
 	{
 		for url in urls.into_iter().map(Into::into) {
-			match url.as_url().kind() {
-				AuthKind::Regular | AuthKind::Search => self.report_local(url),
-				AuthKind::Mount | AuthKind::Hub | AuthKind::Scope | AuthKind::Sftp => {
-					self.report_virtual(url)
-				}
+			if url.is_regular() {
+				self.report_local(url);
+			} else {
+				self.report_virtual(url);
 			}
 		}
 	}
@@ -51,12 +50,12 @@ impl Reporter {
 	}
 
 	fn report_virtual(&self, url: UrlCow) {
-		let Some(parent) = url.parent() else { return };
-		if !WATCHED.read().contains_url(parent) {
+		let Some((trail, _)) = url.pair() else { return };
+		if !WATCHED.read().contains_url(trail) {
 			return;
 		}
 
-		self.virtual_tx.send(VirtualReport::Url(parent.to_owned())).ok();
+		self.virtual_tx.send(VirtualReport::Url(trail.to_owned())).ok();
 		self.virtual_tx.send(VirtualReport::Url(url.into_owned())).ok();
 	}
 }

@@ -18,7 +18,11 @@ fn check(f: &Files, entry: &str, is_dir: bool, context: &str) -> Option<bool> {
 
 fn init() {
 	static ONCE: std::sync::Once = std::sync::Once::new();
-	ONCE.call_once(yazi_shared::init);
+	ONCE.call_once(|| {
+		yazi_shared::init();
+		yazi_config::VFS
+			.init(toml::from_str("[fd.default]\nkind = \"view\"\nrun = \"fd\"").expect("vfs"));
+	});
 }
 
 #[test]
@@ -46,11 +50,17 @@ fn flattened_listings_hide_descendants() {
 	init();
 	let f = files(r#"excludes = [{ url = "**/.git/", in = "*" }]"#);
 
-	// A search listing holds entries below the folder, so the generated
+	// A view listing holds entries below the folder, so the generated
 	// `**/.git/**` counterpart applies there and only there.
-	assert_eq!(check(&f, "/home/u/proj/.git/config", false, "search://q//home/u/proj"), Some(true));
+	assert_eq!(
+		check(&f, "/home/u/proj/.git/config", false, "fd://default/@Ds2kw0A//home/u/proj"),
+		Some(true)
+	);
 	// Descendant directories too, not just files.
-	assert_eq!(check(&f, "/home/u/proj/.git/hooks", true, "search://q//home/u/proj"), Some(true));
+	assert_eq!(
+		check(&f, "/home/u/proj/.git/hooks", true, "fd://default/@Ds2kw0A//home/u/proj"),
+		Some(true)
+	);
 }
 
 #[test]
@@ -102,21 +112,21 @@ fn in_scopes_a_rule_to_a_subtree() {
 }
 
 #[test]
-fn in_star_applies_everywhere_including_search() {
+fn in_star_applies_everywhere_including_views() {
 	init();
 	let f = files(r#"excludes = [{ url = "**/*.tmp", in = "*" }]"#);
 
 	assert_eq!(check(&f, "/anywhere/x.tmp", false, "/anywhere"), Some(true));
-	assert_eq!(check(&f, "/anywhere/x.tmp", false, "search://q//anywhere"), Some(true));
+	assert_eq!(check(&f, "/anywhere/x.tmp", false, "fd://default/@Ds2kw0A//anywhere"), Some(true));
 }
 
 #[test]
 fn in_can_target_a_scheme() {
 	init();
-	let f = files(r#"excludes = [{ url = "**/*.log", in = "search://**" }]"#);
+	let f = files(r#"excludes = [{ url = "**/*.log", in = "fd://**" }]"#);
 
 	// Only in flattened listings, not while browsing.
-	assert_eq!(check(&f, "/p/a.log", false, "search://q//p"), Some(true));
+	assert_eq!(check(&f, "/p/a.log", false, "fd://default/@Ds2kw0A//p"), Some(true));
 	assert_eq!(check(&f, "/p/a.log", false, "/p"), None);
 }
 

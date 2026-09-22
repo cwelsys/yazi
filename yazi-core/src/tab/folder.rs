@@ -2,10 +2,10 @@ use std::{mem, ops::Deref, sync::Arc};
 
 use yazi_config::{LAYOUT, YAZI, files::Exclude};
 use yazi_dds::Pubsub;
-use yazi_fs::{Entries, ExcludeFilter, FilesOp, FolderStage, cha::ChaType, file::File};
+use yazi_fs::{Entries, ExcludeFilter, FolderStage, file::File, op::FilesOp, stat::{StatKind, StatType}};
 use yazi_macro::log_if_err;
-use yazi_shared::{id::Id, path::{DynPath, PathBufDyn, PathDyn}, url::{UrlBuf, UrlLike}};
-use yazi_watcher::RefreshRequest;
+use yazi_shared::{id::Id, path::{DynPath, PathBufDyn, PathDyn}, url::{AsUrl, Url, UrlBuf, UrlLike}};
+use yazi_watcher::Op;
 use yazi_widgets::{Scrollable, Step};
 
 use crate::MgrProxy;
@@ -55,15 +55,25 @@ impl<T: Into<UrlBuf>> From<T> for Folder {
 		let mut entries = Entries::new(YAZI.mgr.show_hidden.get());
 		let rules = YAZI.files.excludes_in(&url);
 		if !rules.is_empty() {
-			let recursive = url.is_search();
+			let recursive = url.is_view();
 			entries.set_excludes(Some(ExcludeFilter::new(Arc::new(move |u, is_dir| {
 				Exclude::verdict(&rules, u, is_dir, recursive)
 			}))));
 		}
 
-		Self { file: File::from_dummy(url, Some(ChaType::Dir)), entries, ..Default::default() }
+		Self { file: File::from_dummy(url, Some(StatType::Dir)), entries, ..Default::default() }
 	}
 }
+
+impl AsUrl for Folder {
+	fn as_url(&self) -> Url<'_> { self.file.as_url() }
+}
+
+impl AsUrl for &Folder {
+	fn as_url(&self) -> Url<'_> { self.file.as_url() }
+}
+
+impl UrlLike for Folder {}
 
 impl Folder {
 	fn update(&mut self, op: FilesOp) -> bool {
@@ -72,16 +82,23 @@ impl Folder {
 			FilesOp::Full(ref file, _) => {
 				(self.file, self.stage) = (file.clone(), FolderStage::Loaded);
 			}
+			FilesOp::Part(_, _, ticket) if self.stage.is_loaded() && ticket <= self.entries.ticket() => {
+				return false;
+			}
 			FilesOp::Part(_, ref files, _) if files.is_empty() => {
 				self.stage = FolderStage::Loading;
 			}
 			FilesOp::Part(_, _, ticket) if ticket == self.entries.ticket() => {
 				self.stage = FolderStage::Loading;
 			}
+			FilesOp::Done(_, ticket) if self.stage.is_loaded() && ticket <= self.entries.ticket() => {
+				return false;
+			}
 			FilesOp::Done(ref file, ticket) if ticket == self.entries.ticket() => {
 				(self.file, self.stage) = (file.clone(), FolderStage::Loaded);
 			}
-			FilesOp::IOErr(_, ref err) => {
+			FilesOp::Fail(_, ref err) => {
+				self.file.stat.kind.insert(StatKind::DUMMY);
 				self.stage = FolderStage::Failed(err.clone());
 			}
 			_ => {}
@@ -93,12 +110,13 @@ impl Folder {
 			FilesOp::Part(_, files, ticket) => self.entries.update_part(files, ticket),
 			FilesOp::Done(..) => {}
 			FilesOp::Size(_, sizes) => self.entries.update_size(sizes),
-			FilesOp::IOErr(..) => self.entries.update_ioerr(),
+			FilesOp::Rank(_, ranks) => self.entries.update_rank(ranks),
+			FilesOp::Fail(..) => self.entries.update_fail(),
 
-			FilesOp::Creating(_, files) => self.entries.update_creating(files),
-			FilesOp::Deleting(_, urns) => deleted = self.entries.update_deleting(urns),
-			FilesOp::Updating(_, files) => _ = self.entries.update_updating(files),
-			FilesOp::Upserting(_, files) => self.entries.update_upserting(files),
+			FilesOp::Create(_, files) => self.entries.update_create(files),
+			FilesOp::Delete(_, urns) => deleted = self.entries.update_delete(urns),
+			FilesOp::Update(_, files) => _ = self.entries.update_existing(files),
+			FilesOp::Upsert(_, files) => self.entries.update_upsert(files),
 		};
 
 		self.trace.take_if(|_| self.entries.is_empty() && !self.stage.is_loading());
@@ -109,11 +127,21 @@ impl Folder {
 	}
 
 	pub fn update_pub(&mut self, tab: Id, op: FilesOp) -> bool {
-		if self.update(op) {
-			log_if_err!(Pubsub::pub_after_load(tab, &self.url, &self.stage));
-			return true;
+		use FilesOp::*;
+		let load = matches!(op, Full(..) | Part(..) | Done(..) | Fail(..));
+		let patch = matches!(op, Create(..) | Delete(..) | Update(..) | Upsert(..));
+
+		if patch {
+			log_if_err!(Pubsub::pub_after_patch(tab, &op));
 		}
-		false
+
+		if !self.update(op) {
+			return false;
+		} else if load {
+			log_if_err!(Pubsub::pub_after_load(tab, &self.url, &self.stage));
+		}
+
+		true
 	}
 
 	pub fn arrow(&mut self, step: impl Into<Step>) -> bool {
@@ -161,9 +189,22 @@ impl Folder {
 	#[inline]
 	pub(crate) fn invalidate(&mut self) { self.stale = true; }
 
-	#[inline]
-	pub fn take_request(&mut self) -> RefreshRequest {
-		RefreshRequest { file: self.file.clone(), force: mem::take(&mut self.stale) }
+	pub fn take_refresh(&mut self) -> Op {
+		let file = self.file.clone();
+
+		if mem::take(&mut self.stale) {
+			// The directory changed while loading: rebuild it completely.
+			Op::Refresh { file, force: true }
+		} else if self.stage.is_loaded() {
+			// The directory is already loaded: check whether it changed.
+			Op::Refresh { file, force: false }
+		} else if self.entries.ticket() != Id::ZERO {
+			// Loading has already started: do not start another partial load.
+			Op::Refresh { file, force: false }
+		} else {
+			// This is the first load: read the directory in parts.
+			Op::Load(file)
+		}
 	}
 
 	pub fn sync_page(&mut self, force: bool) {
@@ -210,8 +251,8 @@ impl Folder {
 		let len = self.entries.len();
 		let limit = LAYOUT.get().folder_limit();
 
-		let start = (page.saturating_sub(1) * limit).min(len.saturating_sub(1));
-		let end = ((page + 2) * limit).min(len);
+		let start = page.saturating_sub(1).saturating_mul(limit).min(len);
+		let end = page.saturating_add(2).saturating_mul(limit).min(len);
 		&self.entries[start..end]
 	}
 }

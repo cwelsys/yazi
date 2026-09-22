@@ -1,10 +1,11 @@
-use std::{fs, io, os::windows::ffi::OsStrExt, path::{Path, PathBuf}, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{fs, io, path::{Path, PathBuf}, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 use windows::{Win32::{Foundation::*, System::Com::*, UI::Shell::*}, core::PCWSTR};
 use yazi_ffi::Com;
+use yazi_shim::ToWide;
 
 use super::{super::{TrashEntries, TrashEntry, TrashId}, shell_item::ShellItem, trash_sig::TrashSig};
-use crate::{cha::Cha, file::File};
+use crate::{file::File, stat::Stat};
 
 thread_local! {
 	static COM: io::Result<Com> = Com::new();
@@ -24,7 +25,7 @@ impl Trash {
 			return self.tops();
 		};
 
-		if !entry.lcha.is_dir() || entry.lcha.is_indirect() {
+		if !entry.lstat.is_dir() || entry.lstat.is_indirect() {
 			return Err(io::Error::new(io::ErrorKind::InvalidInput, "trash item is not a directory"));
 		}
 
@@ -53,16 +54,16 @@ impl Trash {
 		let original = original.join(id.rel());
 		let backing: PathBuf = top.display_name(SIGDN_FILESYSPATH)?.into();
 
-		let cha = Cha::new(backing.file_name().unwrap_or_default(), fs::symlink_metadata(&backing)?);
-		if cha.is_dir() && !cha.is_indirect() {
+		let stat = Stat::new(backing.file_name().unwrap_or_default(), fs::symlink_metadata(&backing)?);
+		if stat.is_dir() && !stat.is_indirect() {
 			top.resolve(id.rel())?.entry(id.clone(), Some(original))
 		} else {
 			Err(io::Error::new(io::ErrorKind::InvalidInput, "trash item is not a directory"))
 		}
 	}
 
-	pub(crate) fn metadata(&self, entry: &TrashEntry, follow: bool) -> io::Result<Cha> {
-		Ok(if follow { entry.cha } else { entry.lcha })
+	pub(crate) fn metadata(&self, entry: &TrashEntry, follow: bool) -> io::Result<Stat> {
+		Ok(if follow { entry.stat } else { entry.lstat })
 	}
 
 	pub(crate) fn revalidate(
@@ -70,13 +71,13 @@ impl Trash {
 		entry: Option<&TrashEntry>,
 		current: &File,
 	) -> io::Result<Option<File>> {
-		let cha = if let Some(entry) = entry {
-			TrashSig::item(&self.resolve(entry)?)?
+		let latest = if let Some(entry) = entry {
+			File { stat: TrashSig::item(&self.resolve(entry)?)?, ..entry.clone().into_file(&current.url) }
 		} else {
-			TrashSig::root()?
+			File { stat: TrashSig::root()?, ..current.clone() }
 		};
 
-		Ok(if cha.hits(current.cha) { None } else { Some(File { cha, ..current.clone() }) })
+		Ok(if latest.hits(current) { None } else { Some(latest) })
 	}
 
 	pub(crate) fn remove_file(&self, entry: &TrashEntry) -> io::Result<()> {
@@ -128,12 +129,10 @@ impl Trash {
 		fs::create_dir_all(parent)?;
 
 		let parent = ShellItem::new(parent)?;
-		let name: Vec<u16> = to
+		let name = to
 			.file_name()
 			.ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid restore target"))?
-			.encode_wide()
-			.chain([0])
-			.collect();
+			.to_wide();
 
 		operate(FOF_NO_UI | FOFX_EARLYFAILURE, |operation| unsafe {
 			operation.MoveItem(&item.0, &parent.0, PCWSTR(name.as_ptr()), None)

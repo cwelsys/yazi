@@ -1,10 +1,10 @@
 use anyhow::{Result, bail};
-use yazi_macro::{act, succ};
+use yazi_macro::succ;
 use yazi_parser::mgr::CopyForm;
 use yazi_shared::{data::Data, strand::ToStrand, url::UrlLike};
 use yazi_widgets::CLIPBOARD;
 
-use crate::{Actor, Ctx};
+use crate::{Actor, Ctx, act};
 
 pub struct Copy;
 
@@ -15,9 +15,6 @@ impl Actor for Copy {
 
 	fn act(cx: &mut Ctx, form: Self::Form) -> Result<Data> {
 		act!(mgr:escape_visual, cx)?;
-		if form.r#type == "dirname" {
-			yazi_proxy::deprecate!("`copy dirname` is deprecated, use `copy dirpath` instead");
-		}
 
 		let mut s = Vec::<u8>::new();
 		let mut it = if form.hovered {
@@ -41,7 +38,7 @@ impl Actor for Copy {
 					}
 				}
 				"dirurl" => {
-					if let Some(p) = f.url.parent() {
+					if let Some(p) = f.parent() {
 						s.extend_from_slice(&form.separator.transform(&p.to_strand()));
 					}
 				}

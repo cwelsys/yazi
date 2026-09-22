@@ -70,7 +70,10 @@ fn test_max_common_root() {
 	assert_eq!(max_common_root(&[]), 0);
 	assert(&[""], "");
 	assert(&["a"], "");
-	assert(&["search://kw:1:1/a", "search://kw:1:1/b"], "search://kw/");
+	assert(
+		&["test-view://fx:1:1/@Ds2kw0A//a", "test-view://fx:1:1/@Ds2kw0A//b"],
+		"test-view://fx/@Ds2kw0A//",
+	);
 	assert(&["test-hub://a1/@root/a", "test-hub://b1/@root/b"], "test-hub://root/@/");
 
 	assert(&["/a"], "/");
@@ -88,35 +91,30 @@ pub async fn create_owned_dir(p: &Path) -> io::Result<()> {
 pub fn create_owned_dir_blocking(p: &Path) -> io::Result<()> {
 	#[cfg(unix)]
 	{
-		use std::{fs::{DirBuilder, OpenOptions}, mem, os::unix::{fs::{DirBuilderExt, OpenOptionsExt}, io::AsRawFd}};
+		use std::{fs::{DirBuilder, OpenOptions}, os::unix::fs::{DirBuilderExt, OpenOptionsExt}};
 
-		use libc::{O_DIRECTORY, O_NOFOLLOW};
-		use uzers::Users;
-		use yazi_shared::USERS_CACHE;
+		use rustix::fs::{self, Mode, OFlags};
 
 		DirBuilder::new().mode(0o700).recursive(true).create(p)?;
-		let dir = OpenOptions::new().read(true).custom_flags(O_DIRECTORY | O_NOFOLLOW).open(p)?;
 
-		let mut stat: libc::stat = unsafe { mem::zeroed() };
-		if unsafe { libc::fstat(dir.as_raw_fd(), &mut stat) } != 0 {
-			return Err(io::Error::last_os_error());
-		}
+		// Open and stat the directory.
+		let dir = OpenOptions::new()
+			.read(true)
+			.custom_flags((OFlags::DIRECTORY | OFlags::NOFOLLOW).bits() as _)
+			.open(p)?;
+		let stat = fs::fstat(&dir)?;
 
 		// Reject directories not owned by the current user.
-		let uid = USERS_CACHE.get_current_uid();
+		let uid = yazi_shim::Uzers::uid();
 		if stat.st_uid != uid {
 			return Err(io::Error::new(
 				io::ErrorKind::PermissionDenied,
-				format!("directory {:?} is owned by uid {} but current uid is {}", p, stat.st_uid, uid),
+				format!("directory {p:?} is owned by uid {} but current uid is {uid}", stat.st_uid),
 			));
 		}
 
 		// Enforce mode 0o700 via the fd.
-		if unsafe { libc::fchmod(dir.as_raw_fd(), 0o700) } != 0 {
-			return Err(io::Error::last_os_error());
-		}
-
-		Ok(())
+		Ok(fs::fchmod(&dir, Mode::RWXU)?)
 	}
 	#[cfg(not(unix))]
 	{

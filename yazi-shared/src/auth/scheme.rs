@@ -1,14 +1,15 @@
 use std::{fmt, str::FromStr};
 
 use anyhow::{Result, bail};
+use mlua::{FromLua, IntoLua, Lua, LuaString, Value};
 use serde_with::DeserializeFromStr;
+use strum::EnumIs;
 
 use crate::KebabCasedKey;
 
-#[derive(Clone, Debug, DeserializeFromStr, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, DeserializeFromStr, EnumIs, Eq, Hash, PartialEq)]
 pub enum Scheme {
 	Regular,
-	Search,
 	Sftp,
 	Custom(KebabCasedKey),
 }
@@ -47,7 +48,6 @@ impl FromStr for Scheme {
 	fn from_str(s: &str) -> Result<Self> {
 		Ok(match s {
 			"regular" => Self::Regular,
-			"search" => Self::Search,
 			"sftp" => Self::Sftp,
 			_ if let Some(s) = KebabCasedKey::new(s) => Self::Custom(s),
 			_ => bail!("scheme must be 1-20 characters in kebab-case, got: {s}"),
@@ -59,9 +59,26 @@ impl Scheme {
 	pub(crate) fn as_str(&self) -> &str {
 		match self {
 			Self::Regular => "regular",
-			Self::Search => "search",
 			Self::Sftp => "sftp",
 			Self::Custom(s) => s,
 		}
+	}
+}
+
+impl FromLua for Scheme {
+	fn from_lua(value: Value, lua: &Lua) -> mlua::Result<Self> {
+		Ok(LuaString::from_lua(value, lua)?.to_str()?.parse()?)
+	}
+}
+
+impl IntoLua for Scheme {
+	fn into_lua(self, lua: &Lua) -> mlua::Result<Value> {
+		lua.create_string(self.as_str())?.into_lua(lua)
+	}
+}
+
+impl IntoLua for &Scheme {
+	fn into_lua(self, lua: &Lua) -> mlua::Result<Value> {
+		lua.create_string(self.as_str())?.into_lua(lua)
 	}
 }

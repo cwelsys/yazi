@@ -24,6 +24,6 @@ impl Files {
 	/// folder should hoist [`Self::excludes_in`] out of its loop instead.
 	pub fn matches(&self, url: impl AsUrl, is_dir: bool, context: impl AsUrl) -> Option<bool> {
 		let context = context.as_url();
-		Exclude::verdict(&self.excludes_in(context), url, is_dir, context.is_search())
+		Exclude::verdict(&self.excludes_in(context), url, is_dir, context.is_view())
 	}
 }

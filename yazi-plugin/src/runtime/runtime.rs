@@ -50,7 +50,7 @@ fn path() -> Composer<ComposerGet, ComposerSet> {
 fn args() -> Composer<ComposerGet, ComposerSet> {
 	fn get(lua: &Lua, key: &[u8]) -> mlua::Result<Value> {
 		match key {
-			b"entries" => lua.create_sequence_from(ARGS.entries.iter().cloned())?.into_lua(lua),
+			b"entries" => lua.create_sequence_from(ARGS.entries.as_slice())?.into_lua(lua),
 			b"cwd_file" => ARGS.cwd_file.as_ref().map(UrlBuf::from).into_lua(lua),
 			b"chooser_file" => ARGS.chooser_file.as_ref().map(UrlBuf::from).into_lua(lua),
 			_ => Ok(Value::Nil),
@@ -124,8 +124,6 @@ fn preview() -> Composer<ComposerGet, ComposerSet> {
 			b"tab_size" => p.tab_size.into_lua(lua)?,
 			b"max_width" => p.max_width.into_lua(lua)?,
 			b"max_height" => p.max_height.into_lua(lua)?,
-
-			b"cache_dir" => lua.to_value_with(&p.cache_dir, SER_OPT)?,
 
 			b"image_delay" => p.image_delay.into_lua(lua)?,
 			b"image_filter" => lua.create_string(&p.image_filter)?.into_lua(lua)?,

@@ -2,13 +2,13 @@ use std::iter;
 
 use anyhow::Result;
 use yazi_core::{Invalidator, Reconciler};
-use yazi_fs::FilesOp;
-use yazi_macro::{act, render, succ};
+use yazi_fs::op::FilesOp;
+use yazi_macro::{render, succ};
 use yazi_parser::{mgr::UpdateFilesForm, spark::SparkKind};
 use yazi_shared::{Source, data::Data, url::UrlLike};
 use yazi_watcher::local::LINKED;
 
-use crate::{Actor, Ctx};
+use crate::{Actor, Ctx, act};
 
 pub struct UpdateFiles;
 
@@ -27,7 +27,7 @@ impl Actor for UpdateFiles {
 		}
 		render!(cx.mgr.yanked.catchup_revision(false));
 
-		let tabs = cx.tabs().indices_or_active(form.tabs);
+		let tabs = cx.indices_or_tab(form.tabs);
 		let Some((&last, tabs)) = tabs.split_last() else { succ!() };
 
 		for &tab in tabs {
@@ -79,8 +79,8 @@ impl UpdateFiles {
 	fn update_parent(cx: &mut Ctx, op: FilesOp) -> Result<Data> {
 		let tab = cx.tab_mut();
 
-		let key = tab.current.url.key();
-		let leave = matches!(op, FilesOp::Deleting(_, ref keys) if keys.contains(&key));
+		let key = tab.current.key();
+		let leave = matches!(op, FilesOp::Delete(_, ref keys) if keys.contains(&key));
 
 		if let Some(f) = tab.parent.as_mut() {
 			render!(f.update_pub(tab.id, op));
@@ -94,7 +94,7 @@ impl UpdateFiles {
 	}
 
 	fn update_current(cx: &mut Ctx, op: FilesOp) -> Result<Data> {
-		let calc = !matches!(op, FilesOp::Size(..) | FilesOp::Deleting(..));
+		let calc = !matches!(op, FilesOp::Size(..) | FilesOp::Rank(..) | FilesOp::Delete(..));
 
 		let id = cx.tab().id;
 		if !cx.current_mut().update_pub(id, op) {
@@ -119,8 +119,8 @@ impl UpdateFiles {
 
 	fn update_history(cx: &mut Ctx, op: FilesOp) -> Result<Data> {
 		let tab = cx.tab_mut();
-		let leave = tab.parent.as_ref().and_then(|f| f.url.pair()).is_some_and(
-			|(t, key)| matches!(&op, FilesOp::Deleting(trail, keys) if trail == t && keys.contains(&key)),
+		let leave = tab.parent.as_ref().and_then(|f| f.pair()).is_some_and(
+			|(t, key)| matches!(&op, FilesOp::Delete(trail, keys) if trail == t && keys.contains(&key)),
 		);
 
 		let (folder, evicted) = tab.history.ensure(op.cwd());

@@ -33,11 +33,14 @@ impl Default for Loader {
 			("dds".to_owned(), preset!("plugins/dds").into()),
 			("dnd".to_owned(), preset!("plugins/dnd").into()),
 			("empty".to_owned(), preset!("plugins/empty").into()),
+			("error".to_owned(), preset!("plugins/error").into()),
 			("extract".to_owned(), preset!("plugins/extract").into()),
+			("fd".to_owned(), preset!("plugins/fd").into()),
 			("file".to_owned(), preset!("plugins/file").into()),
 			("folder".to_owned(), preset!("plugins/folder").into()),
 			("font".to_owned(), preset!("plugins/font").into()),
 			("fzf".to_owned(), preset!("plugins/fzf").into()),
+			("go".to_owned(), preset!("plugins/go").into()),
 			("image".to_owned(), preset!("plugins/image").into()),
 			("init".to_owned(), preset!("plugins/init").into()),
 			("json".to_owned(), preset!("plugins/json").into()),
@@ -49,8 +52,9 @@ impl Default for Loader {
 			("mime.trash".to_owned(), preset!("plugins/mime-trash").into()),
 			("multi".to_owned(), preset!("plugins/multi").into()),
 			("noop".to_owned(), preset!("plugins/noop").into()),
-			("null".to_owned(), preset!("plugins/null").into()),
 			("pdf".to_owned(), preset!("plugins/pdf").into()),
+			("rg".to_owned(), preset!("plugins/rg").into()),
+			("search".to_owned(), preset!("plugins/search").into()),
 			("session".to_owned(), preset!("plugins/session").into()),
 			("svg".to_owned(), preset!("plugins/svg").into()),
 			("trash".to_owned(), preset!("plugins/trash").into()),
@@ -79,7 +83,12 @@ impl Default for Loader {
 			("tasks".to_owned(), [][..].into()),
 			("tip".to_owned(), [][..].into()),
 			// Reserved
+			("history".to_owned(), [][..].into()),
 			("inline".to_owned(), [][..].into()),
+			("none".to_owned(), [][..].into()),
+			("null".to_owned(), [][..].into()),
+			("sftp".to_owned(), [][..].into()),
+			("undo".to_owned(), [][..].into()),
 		]);
 		Self { cache: RwLock::new(cache) }
 	}

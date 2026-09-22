@@ -34,6 +34,7 @@ macro_rules! deprecate {
 		if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
 			let source = match $crate::runtime!($lua)?.name()? {
 				"init" => "`init.lua` config file",
+				"root" => "custom UI plugin",
 				s => &format!("`{s}.yazi` plugin"),
 			};
 			yazi_macro::emit!(Call(
@@ -205,10 +206,13 @@ macro_rules! impl_style_shorthands {
 #[macro_export]
 macro_rules! impl_file_fields {
 	($fields:ident) => {
+		use yazi_shared::url::UrlLike as _;
 		use yazi_shim::mlua::UserDataFieldsExt;
 
-		$fields.add_cached_field("cha", |_, me| Ok(me.cha));
-		$fields.add_cached_field("url", |_, me| Ok(me.url_owned()));
+		$fields.add_cached_field("cha", |_, me| Ok(me.stat)); // TODO: remove
+		$fields.add_cached_field("stat", |_, me| Ok(me.stat));
+		$fields.add_cached_field("lstat", |_, me| Ok(me.lstat()));
+		$fields.add_cached_field("url", |_, me| Ok(me.to_url()));
 		$fields.add_cached_field("link_to", |_, me| Ok(me.extra.link_to().cloned()));
 
 		$fields.add_cached_field("name", |lua, me| {

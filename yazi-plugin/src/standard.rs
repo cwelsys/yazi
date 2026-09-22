@@ -25,13 +25,14 @@ fn stage_1(lua: &Lua) -> Result<()> {
 	globals.raw_set("ui", crate::ui::compose())?;
 	globals.raw_set("ya", crate::utils::compose(false))?;
 	globals.raw_set("fs", crate::fs::compose())?;
+	globals.raw_set("vf", &*yazi_config::VFS)?;
 	globals.raw_set("ps", crate::pubsub::compose())?;
 	globals.raw_set("rt", crate::runtime::compose())?;
 	globals.raw_set("km", crate::keymap::compose())?;
 	globals.raw_set("th", crate::theme::compose())?;
 
 	yazi_shim::fs::Error::install(lua)?;
-	yazi_fs::cha::Cha::install(lua)?;
+	yazi_fs::stat::Stat::install(lua)?;
 	yazi_binding::process::install(lua)?;
 	yazi_fs::file::File::install(lua)?;
 	yazi_shared::url::UrlBuf::install(lua)?;

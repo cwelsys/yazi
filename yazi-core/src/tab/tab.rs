@@ -1,8 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::Result;
 use ratatui_core::layout::Rect;
-use tokio::task::JoinHandle;
 use yazi_binding::position::{Origin, Position};
 use yazi_config::LAYOUT;
 use yazi_fs::file::File;
@@ -26,7 +24,6 @@ pub struct Tab {
 	pub spot:    Spot,
 	pub preview: Preview,
 	pub finder:  Option<Finder>,
-	pub search:  Option<JoinHandle<Result<()>>>,
 }
 
 impl Default for Tab {
@@ -47,16 +44,12 @@ impl Default for Tab {
 			spot:    Default::default(),
 			preview: Default::default(),
 			finder:  Default::default(),
-			search:  Default::default(),
 		}
 	}
 }
 
 impl Tab {
-	pub fn shutdown(&mut self) {
-		self.search.take().map(|h| h.abort());
-		self.preview.reset();
-	}
+	pub fn shutdown(&mut self) { self.preview.reset(); }
 }
 
 impl Tab {
@@ -65,7 +58,7 @@ impl Tab {
 	pub fn cwd(&self) -> &UrlBuf { &self.current.url }
 
 	pub fn name(&self) -> Cow<'_, str> {
-		let url = &self.current.url;
+		let url = &self.current;
 		if !self.pref.name.is_empty() {
 			Cow::Borrowed(&self.pref.name)
 		} else if let Some(s) = url.name() {

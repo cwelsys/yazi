@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use yazi_binding::position::{Offset, Origin, Position};
 use yazi_codegen::{DeserializeOver, DeserializeOver2};
-use yazi_shared::{spec::EncodeSpec, url::Url};
+use yazi_shared::{spec::Encode as EncodeSpec, url::Url};
 use yazi_widgets::input::InputOpt;
 
 #[derive(Deserialize, DeserializeOver, DeserializeOver2)]
@@ -33,11 +33,6 @@ pub struct Input {
 	find_origin: Origin,
 	find_offset: Offset,
 
-	// search
-	search_title:  String,
-	search_origin: Origin,
-	search_offset: Offset,
-
 	// shell
 	shell_title:  [String; 2],
 	shell_origin: Origin,
@@ -49,7 +44,7 @@ impl Input {
 		InputOpt {
 			name: "cd".to_owned(),
 			title: self.cd_title.clone(),
-			value: if cwd.kind().is_local() { String::new() } else { EncodeSpec(cwd).to_string() },
+			value: if cwd.is_regular() { String::new() } else { EncodeSpec(cwd).to_string() },
 			history: "shared".to_owned(),
 			position: Position::new(self.cd_origin, self.cd_offset),
 			completion: true,
@@ -99,16 +94,6 @@ impl Input {
 		}
 	}
 
-	pub fn search(&self, name: &str) -> InputOpt {
-		InputOpt {
-			name: "search".to_owned(),
-			title: self.search_title.replace("{n}", name),
-			history: "shared".to_owned(),
-			position: Position::new(self.search_origin, self.search_offset),
-			..Default::default()
-		}
-	}
-
 	pub fn shell(&self, block: bool) -> InputOpt {
 		InputOpt {
 			name: "shell".to_owned(),
@@ -127,7 +112,7 @@ impl Input {
 			position: Position::new(Origin::TopCenter, Offset {
 				x:      0,
 				y:      2,
-				width:  50,
+				width:  80,
 				height: 3,
 			}),
 			..Default::default()

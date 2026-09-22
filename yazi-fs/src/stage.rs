@@ -1,16 +1,13 @@
 use mlua::{IntoLuaMulti, MetaMethod, UserData, UserDataMethods};
 use serde::{Deserialize, Serialize};
+use strum::EnumIs;
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, EnumIs, Eq, PartialEq, Serialize)]
 pub enum FolderStage {
 	#[default]
 	Loading,
 	Loaded,
 	Failed(yazi_shim::fs::Error),
-}
-
-impl FolderStage {
-	pub fn is_loading(&self) -> bool { *self == Self::Loading }
 }
 
 impl UserData for FolderStage {

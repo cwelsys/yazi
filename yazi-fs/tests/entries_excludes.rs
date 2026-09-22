@@ -43,7 +43,7 @@ fn an_in_place_update_does_not_resurface_it() {
 	let mut entries = loaded();
 	let mut files = HashMap::new();
 	files.insert(file("secret").key().to_owned(), file("secret"));
-	entries.update_upserting(files);
+	entries.update_upsert(files);
 
 	assert_eq!(visible(&entries), ["/p/a"]);
 }
@@ -55,7 +55,7 @@ fn an_in_place_update_still_lands_for_a_visible_entry() {
 
 	let mut files = HashMap::new();
 	files.insert(file("b").key().to_owned(), file("b"));
-	entries.update_upserting(files);
+	entries.update_upsert(files);
 
 	assert_eq!(visible(&entries), ["/p/a", "/p/b"]);
 }
@@ -82,7 +82,7 @@ fn an_update_while_revealed_keeps_the_entry_visible() {
 
 	let mut files = HashMap::new();
 	files.insert(file("secret").key().to_owned(), file("secret"));
-	entries.update_upserting(files);
+	entries.update_upsert(files);
 
 	let mut shown = visible(&entries);
 	shown.sort();

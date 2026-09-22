@@ -1,10 +1,16 @@
+use std::iter;
+
 use hashbrown::{HashMap, HashSet};
-use yazi_fs::{FilesOp, file::File};
+use yazi_fs::{file::File, op::FilesOp};
 use yazi_shared::{path::{PathBufDyn, PathDyn}, url::{UrlBuf, UrlLike}};
 
-use crate::{mgr::{Mgr, Yanked}, tab::Selected};
+use crate::{mgr::{Mgr, Yanked}, tab::{Folder, History, Selected, Tab}};
 
 pub struct Reconciler<'a> {
+	current: &'a Folder,
+	parent:  &'a Option<Folder>,
+	history: &'a History,
+
 	selected: &'a mut Selected,
 	yanked:   &'a mut Yanked,
 }
@@ -12,24 +18,33 @@ pub struct Reconciler<'a> {
 impl<'a> Reconciler<'a> {
 	pub fn new(tab: usize, mgr: &'a mut Mgr) -> Self {
 		let Mgr { tabs, yanked, .. } = mgr;
-		Self { selected: &mut tabs[tab].selected, yanked }
+		let Tab { current, parent, history, selected, .. } = &mut tabs[tab];
+		Self { current, parent, history, selected, yanked }
 	}
 
 	pub fn apply(&mut self, op: &FilesOp) {
+		let cwd = op.cwd();
+
 		match op {
-			FilesOp::Full(_, files) => self.scan(op.cwd(), files, true),
-			FilesOp::Part(_, files, _) | FilesOp::Creating(_, files) => {
-				self.scan(op.cwd(), files, false);
+			FilesOp::Full(_, files) => self.scan(cwd, files, true),
+			FilesOp::Done(_, ticket) if let Some(f) = self.folder(cwd) => {
+				if f.stage.is_loading() && f.entries.ticket() == *ticket {
+					self.scan(cwd, f.entries.all(), true);
+				}
 			}
-			FilesOp::Deleting(cwd, keys) => self.delete(cwd, keys),
-			FilesOp::Updating(cwd, files) | FilesOp::Upserting(cwd, files) => {
+			FilesOp::Create(_, files) => self.scan(cwd, files, false),
+			FilesOp::Delete(_, keys) => self.delete(cwd, keys),
+			FilesOp::Update(_, files) | FilesOp::Upsert(_, files) => {
 				self.update(cwd, files);
 			}
 			_ => {}
 		}
 	}
 
-	fn scan(&mut self, cwd: &UrlBuf, files: &[File], authoritative: bool) {
+	fn scan<'f, I>(&mut self, cwd: &UrlBuf, files: I, authoritative: bool)
+	where
+		I: IntoIterator<Item = &'f File>,
+	{
 		let mut tracked: HashMap<_, _> = self
 			.selected
 			.urls()
@@ -55,19 +70,26 @@ impl<'a> Reconciler<'a> {
 	}
 
 	fn delete(&mut self, cwd: &UrlBuf, keys: &HashSet<PathBufDyn>) {
-		let selected = Patch::from_deleting(self.selected.urls(), cwd, keys);
-		let yanked = Patch::from_deleting(self.yanked.urls(), cwd, keys);
+		let selected = Patch::from_delete(self.selected.urls(), cwd, keys);
+		let yanked = Patch::from_delete(self.yanked.urls(), cwd, keys);
 
 		selected.apply_selected(self.selected);
 		yanked.apply_yanked(self.yanked);
 	}
 
 	fn update(&mut self, cwd: &UrlBuf, files: &HashMap<PathBufDyn, File>) {
-		let selected = Patch::from_updating(self.selected.urls(), cwd, files);
-		let yanked = Patch::from_updating(self.yanked.urls(), cwd, files);
+		let selected = Patch::from_update(self.selected.urls(), cwd, files);
+		let yanked = Patch::from_update(self.yanked.urls(), cwd, files);
 
 		selected.apply_selected(self.selected);
 		yanked.apply_yanked(self.yanked);
+	}
+
+	fn folder(&self, cwd: &UrlBuf) -> Option<&'a Folder> {
+		iter::once(self.current)
+			.chain(self.parent.as_ref())
+			.chain(self.history.get(cwd))
+			.find(|f| f.url == *cwd)
 	}
 }
 
@@ -100,7 +122,7 @@ impl<'a> Patch<'a> {
 		me
 	}
 
-	fn from_deleting<'u>(
+	fn from_delete<'u>(
 		urls: impl Iterator<Item = &'u UrlBuf>,
 		cwd: &UrlBuf,
 		keys: &HashSet<PathBufDyn>,
@@ -115,7 +137,7 @@ impl<'a> Patch<'a> {
 		}
 	}
 
-	fn from_updating<'u>(
+	fn from_update<'u>(
 		urls: impl Iterator<Item = &'u UrlBuf>,
 		cwd: &UrlBuf,
 		files: &'a HashMap<PathBufDyn, File>,

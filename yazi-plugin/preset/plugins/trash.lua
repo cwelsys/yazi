@@ -23,18 +23,11 @@ end
 local function file(url, ent)
 	return File {
 		url = url,
-		cha = ent.cha,
+		stat = ent.stat,
+		lstat = ent.lstat,
 		link_to = ent.link_to,
 		backing = ent.backing,
 	}
-end
-
-local function files(parent, ents)
-	for i, ent in ipairs(ents) do
-		local url = parent:join(ent.name):into_domain(ent.key)
-		ents[i] = { cha = ent.lcha, file = file(url, ent) }
-	end
-	return ents
 end
 
 local function notify(action, err)
@@ -79,11 +72,11 @@ restore_recursively = function(id, collision)
 	local ent, err = fs.trash.entry(id)
 	if not ent then
 		return false, 1, err
-	elseif not ent.cha.is_dir or ent.cha.is_indirect then
+	elseif not ent.stat.is_dir or ent.stat.is_indirect then
 		return false, 1, collision
 	end
 
-	local target = ent.original and fs.cha(Url(ent.original), false)
+	local target = ent.original and fs.stat(Url(ent.original), false)
 	if not target or not target.is_dir or target.is_indirect then
 		return false, 1, collision
 	end
@@ -238,7 +231,7 @@ function M:spot(job)
 end
 
 function M:spot_base(job)
-	local cha, pair = job.file.cha, { file = job.file, mime = job.mime }
+	local stat, pair = job.file.stat, { file = job.file, mime = job.mime }
 	local proxy = { file = job.file, mime = job.mime:match("^trash/(.+)") or job.mime }
 	local spotter, previewer, fetchers, preloaders = nil, nil, {}, {}
 
@@ -264,8 +257,8 @@ function M:spot_base(job)
 
 	return {
 		ui.Row({ "Base" }):style(ui.Style():fg("green")),
-		ui.Row { "  Created:", cha.btime and os.date("%Y-%m-%d %H:%M:%S", math.floor(cha.btime)) or "-" },
-		ui.Row { "  Modified:", cha.mtime and os.date("%Y-%m-%d %H:%M:%S", math.floor(cha.mtime)) or "-" },
+		ui.Row { "  Created:", stat.btime and os.date("%Y-%m-%d %H:%M:%S", math.floor(stat.btime)) or "-" },
+		ui.Row { "  Modified:", stat.mtime and os.date("%Y-%m-%d %H:%M:%S", math.floor(stat.mtime)) or "-" },
 		ui.Row { "  Mimetype:", job.mime },
 		ui.Row {},
 
@@ -279,7 +272,9 @@ end
 
 function M:provide(job)
 	local op = job.op
-	if op == "Absolute" or op == "Canonicalize" then
+	if op == "Capabilities" then
+		return {}
+	elseif op == "Absolute" or op == "Canonicalize" then
 		return absolute(job.url)
 	elseif op == "Casefold" then
 		return job.url
@@ -290,19 +285,23 @@ function M:provide(job)
 		elseif err then
 			return nil, err
 		else
-			return Cha { mode = tonumber("40700", 8) }
+			return Stat { mode = tonumber("40700", 8) }
 		end
 	elseif op == "ReadDir" then
-		local ent, err = entry(job.url)
-		if err then
-			return nil, err
-		end
-		local ents, err = fs.trash.list(ent)
-		if ents then
-			return files(job.url, ents)
-		else
-			return nil, err
-		end
+		return ya.co(function()
+			local ent, err = entry(job.url)
+			if err then
+				return nil, err
+			end
+			local ents, err = fs.trash.list(ent)
+			if not ents then
+				return nil, err
+			end
+			for _, ent in ipairs(ents) do
+				local url = job.url:join(ent.name):with_domain(ent.key)
+				coroutine.yield(file(url, ent))
+			end
+		end)
 	elseif op == "Revalidate" then
 		local ent, err = entry(job.file.url)
 		if err then

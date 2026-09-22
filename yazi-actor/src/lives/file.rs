@@ -1,7 +1,7 @@
 use std::{ops::Deref, ptr};
 
 use mlua::{AnyUserData, IntoLua, UserData, UserDataFields, UserDataMethods};
-use yazi_binding::{Range, style::Style};
+use yazi_binding::Range;
 use yazi_config::THEME;
 use yazi_fs::file::FileInventory;
 use yazi_shared::{path::DynPath, url::UrlLike};
@@ -64,14 +64,6 @@ impl UserData for File {
 	fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
 		yazi_binding::impl_file_methods!(methods);
 
-		methods.add_method("icon", |lua, me, ()| {
-			yazi_binding::deprecate!(
-				lua,
-				"{}: `File:icon()` is deprecated, use `th.icon:match(file)` instead"
-			);
-			// TODO: use a cache
-			Ok(yazi_config::THEME.icon.matches(me, me.is_hovered()))
-		});
 		methods.add_method("size", |_, me, ()| {
 			Ok(if me.is_dir() { me.folder.entries.sizes.get(&me.key()).copied() } else { Some(me.len) })
 		});
@@ -80,18 +72,18 @@ impl UserData for File {
 			core.mgr.mimetype.get(&me.url).map(|s| lua.create_string(s)).transpose()
 		});
 		methods.add_method("prefix", |lua, me, ()| {
-			if !me.url.has_trail() {
+			if !me.has_trail() {
 				return Ok(None);
 			}
 
-			let mut comp = me.url.try_strip_prefix(me.url.trail()).unwrap_or(me.url.loc()).components();
+			let mut comp = me.try_strip_prefix(me.trail()).unwrap_or(me.loc()).components();
 			comp.next_back();
 			Some(lua.create_string(comp.dyn_path().encoded_bytes())).transpose()
 		});
 		methods.add_method("style", |lua, me, ()| {
 			let core: CoreRef = lua.named_registry_value("cx")?;
 			let mime = core.mgr.mimetype.get(&me.url).unwrap_or_default();
-			Ok(THEME.filetype.match_style(me, mime).map(Style::from))
+			Ok(THEME.filetype.match_style(me, mime))
 		});
 		methods.add_method("is_yanked", |lua, me, ()| {
 			let core: CoreRef = lua.named_registry_value("cx")?;
@@ -136,7 +128,7 @@ impl UserData for File {
 			if me.folder.url != me.tab.current.url {
 				return Ok(None);
 			}
-			let Some(Some(h)) = me.url.name().map(|s| finder.filter.highlighted(s)) else {
+			let Some(Some(h)) = me.name().map(|s| finder.filter.highlighted(s)) else {
 				return Ok(None);
 			};
 

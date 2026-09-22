@@ -15,7 +15,8 @@ pub(crate) fn compose() -> Composer<ComposerGet, ComposerSet> {
 		match key {
 			b"access" => access(lua)?,
 			b"calc_size" => calc_size(lua)?,
-			b"cha" => cha(lua)?,
+			b"cha" => stat(lua)?, // TODO: remove
+			b"stat" => stat(lua)?,
 			b"clean_url" => clean_url(lua)?,
 			b"copy" => copy(lua)?,
 			b"create" => create(lua)?,
@@ -27,6 +28,7 @@ pub(crate) fn compose() -> Composer<ComposerGet, ComposerSet> {
 			b"read_dir" => read_dir(lua)?,
 			b"remove" => remove(lua)?,
 			b"rename" => rename(lua)?,
+			b"reroute" => reroute(lua)?,
 			b"safename" => safename(lua)?,
 			b"trash" => return yazi_fs::trash::Trash.into_lua(lua),
 			b"unique" => unique(lua)?,
@@ -60,12 +62,12 @@ fn calc_size(lua: &Lua) -> mlua::Result<Function> {
 	})
 }
 
-fn cha(lua: &Lua) -> mlua::Result<Function> {
+fn stat(lua: &Lua) -> mlua::Result<Function> {
 	lua.create_async_function(|lua, (url, follow): (UrlRef, bool)| async move {
-		let cha =
+		let stat =
 			if follow { engine::metadata(&*url).await } else { engine::symlink_metadata(&*url).await };
 
-		match cha {
+		match stat {
 			Ok(c) => c.into_lua_multi(&lua),
 			Err(e) => (Value::Nil, Error::from(e)).into_lua_multi(&lua),
 		}
@@ -79,7 +81,10 @@ fn clean_url(lua: &Lua) -> mlua::Result<Function> {
 fn copy(lua: &Lua) -> mlua::Result<Function> {
 	lua.create_async_function(|lua, (from, to): (UrlRef, UrlRef)| async move {
 		match engine::copy(&*from, &*to, Attrs::default()).await {
-			Ok(len) => len.into_lua_multi(&lua),
+			Ok(tx) => match tx.total().await {
+				Ok(len) => len.into_lua_multi(&lua),
+				Err(e) => (Value::Nil, Error::from(e)).into_lua_multi(&lua),
+			},
 			Err(e) => (Value::Nil, Error::from(e)).into_lua_multi(&lua),
 		}
 	})
@@ -141,6 +146,7 @@ fn op(lua: &Lua) -> mlua::Result<Function> {
 		b"part" => super::FilesOp::part(lua, t),
 		b"done" => super::FilesOp::done(lua, t),
 		b"size" => super::FilesOp::size(lua, t),
+		b"rank" => super::FilesOp::rank(lua, t),
 		b"upsert" => super::FilesOp::upsert(lua, t),
 		_ => Err("Unknown operation".into_lua_err())?,
 	})
@@ -230,6 +236,15 @@ fn rename(lua: &Lua) -> mlua::Result<Function> {
 		match engine::rename(&*from, &*to).await {
 			Ok(()) => true.into_lua_multi(&lua),
 			Err(e) => (false, Error::from(e)).into_lua_multi(&lua),
+		}
+	})
+}
+
+fn reroute(lua: &Lua) -> mlua::Result<Function> {
+	lua.create_async_function(|lua, url: UrlRef| async move {
+		match engine::reroute(&*url).await {
+			Ok(file) => file.into_lua_multi(&lua),
+			Err(e) => (Value::Nil, Error::from(e)).into_lua_multi(&lua),
 		}
 	})
 }

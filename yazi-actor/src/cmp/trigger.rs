@@ -3,13 +3,13 @@ use std::{io, mem};
 use anyhow::Result;
 use yazi_core::cmp::{CmpItem, CmpOpt};
 use yazi_fs::{engine::{DirReader, FileHolder}, path::clean_url};
-use yazi_macro::{act, render, succ};
+use yazi_macro::{render, succ};
 use yazi_parser::cmp::TriggerForm;
 use yazi_proxy::CmpProxy;
 use yazi_shared::{AnyAsciiChar, BytePredictor, data::Data, natsort, path::{DynPath, PathBufDyn, PathLike}, spec::Spec, strand::{AsStrand, StrandLike}, url::{UrlBuf, UrlCow, UrlLike}};
 use yazi_vfs::engine;
 
-use crate::{Actor, Ctx};
+use crate::{Actor, Ctx, act};
 
 pub struct Trigger;
 
@@ -73,7 +73,7 @@ impl Trigger {
 
 		// Spec
 		let spec = spec.zeroed();
-		if spec.kind.is_local() && path.as_strand() == "~" {
+		if spec.is_local() && path.as_strand() == "~" {
 			return None; // We don't complete a `~`, but `~/`
 		}
 
@@ -98,15 +98,18 @@ mod tests {
 
 	fn compare(s: &str, parent: &str, child: &str) {
 		let (mut p, c) = Trigger::split_url(s).unwrap();
-		if let Ok(u) = p.try_strip_prefix(yazi_fs::CWD.load().as_ref()) {
-			p = UrlBuf::Regular(u.as_os().unwrap().into());
+		if p.is_regular()
+			&& let Ok(u) = p.try_strip_prefix(yazi_fs::CWD.load().as_ref())
+		{
+			p = u.as_os().unwrap().into();
 		}
 		assert_eq!((p, c.to_str().unwrap()), (parent.parse().unwrap(), child));
 	}
 
 	#[cfg(unix)]
-	#[test]
-	fn test_split() {
+	#[tokio::test]
+	async fn test_split() {
+		yazi_shim::init_tests();
 		yazi_shared::init_tests();
 		yazi_config::init_tests();
 		yazi_fs::init();
@@ -138,6 +141,7 @@ mod tests {
 	#[cfg(windows)]
 	#[test]
 	fn test_split() {
+		yazi_shim::init_tests();
 		yazi_shared::init_tests();
 		yazi_config::init_tests();
 		yazi_fs::init();

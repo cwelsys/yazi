@@ -46,9 +46,9 @@ pub enum Spark<'a> {
 	Escape(crate::mgr::EscapeForm),
 	EscapeFilter(crate::VoidForm),
 	EscapeFind(crate::VoidForm),
-	EscapeSearch(crate::VoidForm),
 	EscapeSelect(crate::VoidForm),
 	EscapeVisual(crate::VoidForm),
+	EscapeView(crate::VoidForm),
 	Filter(crate::mgr::FilterForm),
 	FilterDo(crate::mgr::FilterForm),
 	Find(crate::mgr::FindForm),
@@ -73,9 +73,6 @@ pub enum Spark<'a> {
 	RemoveDo(crate::mgr::RemoveDoForm),
 	Rename(crate::mgr::RenameForm),
 	Reveal(crate::mgr::RevealForm),
-	Search(crate::mgr::SearchForm),
-	SearchDo(crate::mgr::SearchForm),
-	SearchStop(crate::VoidForm),
 	Seek(crate::mgr::SeekForm),
 	Shell(crate::mgr::ShellForm),
 	Sort(crate::mgr::SortForm),
@@ -251,9 +248,9 @@ impl<'a> IntoLua for Spark<'a> {
 			Self::Escape(b) => b.into_lua(lua),
 			Self::EscapeFilter(b) => b.into_lua(lua),
 			Self::EscapeFind(b) => b.into_lua(lua),
-			Self::EscapeSearch(b) => b.into_lua(lua),
 			Self::EscapeSelect(b) => b.into_lua(lua),
 			Self::EscapeVisual(b) => b.into_lua(lua),
+			Self::EscapeView(b) => b.into_lua(lua),
 			Self::Filter(b) => b.into_lua(lua),
 			Self::FilterDo(b) => b.into_lua(lua),
 			Self::Find(b) => b.into_lua(lua),
@@ -278,9 +275,6 @@ impl<'a> IntoLua for Spark<'a> {
 			Self::RemoveDo(b) => b.into_lua(lua),
 			Self::Rename(b) => b.into_lua(lua),
 			Self::Reveal(b) => b.into_lua(lua),
-			Self::Search(b) => b.into_lua(lua),
-			Self::SearchDo(b) => b.into_lua(lua),
-			Self::SearchStop(b) => b.into_lua(lua),
 			Self::Seek(b) => b.into_lua(lua),
 			Self::Shell(b) => b.into_lua(lua),
 			Self::Sort(b) => b.into_lua(lua),
@@ -384,14 +378,13 @@ try_from_spark!(
 	mgr:enter,
 	mgr:escape_filter,
 	mgr:escape_find,
-	mgr:escape_search,
 	mgr:escape_select,
 	mgr:escape_visual,
+	mgr:escape_view,
 	mgr:follow,
 	mgr:forward,
 	mgr:leave,
 	mgr:refresh,
-	mgr:search_stop,
 	mgr:suspend,
 	mgr:unyank,
 	input:remember,
@@ -447,7 +440,6 @@ try_from_spark!(crate::mgr::RemoveForm, mgr:remove);
 try_from_spark!(crate::mgr::RemoveDoForm, mgr:remove_do);
 try_from_spark!(crate::mgr::RenameForm, mgr:rename);
 try_from_spark!(crate::mgr::RevealForm, mgr:reveal);
-try_from_spark!(crate::mgr::SearchForm, mgr:search, mgr:search_do);
 try_from_spark!(crate::mgr::SeekForm, mgr:seek);
 try_from_spark!(crate::mgr::ShellForm, mgr:shell);
 try_from_spark!(crate::mgr::SortForm, mgr:sort);

@@ -1,3 +1,19 @@
+[fd.default]
+kind = "view"
+run  = "fd"
+
+[rg.default]
+kind = "view"
+run  = "rg"
+
 [trash."*"]
 kind = "hub"
 run  = "trash"
+
+[go.boot]
+kind = "scope"
+run  = "go"
+
+[error.boot]
+kind = "scope"
+run  = "error"

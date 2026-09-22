@@ -1,9 +1,8 @@
-use std::{fs::FileTimes, io, path::Path, sync::Arc};
+use std::{io, path::Path};
 
-use tokio::sync::mpsc;
 use yazi_shared::{auth::AuthKind, path::{DynPath, PathBufDyn}, strand::AsStrand, url::{Url, UrlBuf, UrlCow}};
 
-use crate::{cha::{Cha, ChaMode}, engine::{Attrs, Capabilities, Engine}};
+use crate::{casefold::Casefold, engine::{Attrs, Capabilities, Engine, Transmit}, stat::{Stat, StatMode}};
 
 #[derive(Clone)]
 pub struct Local<'a> {
@@ -30,36 +29,23 @@ impl<'a> Engine for Local<'a> {
 
 	#[inline]
 	async fn capabilities(&self) -> io::Result<Capabilities> {
-		Ok(Capabilities {
-			symlink:          true,
-			hard_link:        true,
-			trash:            true,
-			copy_progressive: true,
-		})
+		Ok(Capabilities::for_kind(AuthKind::Regular))
 	}
 
 	async fn casefold(&self) -> io::Result<UrlBuf> {
-		super::casefold(self.path).await.map(Into::into)
+		Casefold::casefold(self.path).await.map(Into::into)
 	}
 
-	#[inline]
-	async fn copy<P>(&self, to: P, attrs: Attrs) -> io::Result<u64>
-	where
-		P: DynPath,
-	{
-		let to = to.dyn_path().to_os_owned()?;
-		let from = self.path.to_owned();
-		super::copy_impl(from, to, attrs).await
+	async fn copy_to(&self, to: Url<'_>, attrs: Attrs) -> io::Result<Transmit> {
+		let Some(to) = to.as_local() else { return Ok(Transmit::unsupported()) };
+
+		Ok(super::copy_progressive(self.path.to_owned(), to.to_owned(), attrs))
 	}
 
-	fn copy_progressive<P, A>(&self, to: P, attrs: A) -> io::Result<mpsc::Receiver<io::Result<u64>>>
-	where
-		P: DynPath,
-		A: Into<Attrs>,
-	{
-		let to = to.dyn_path().to_os_owned()?;
-		let from = self.path.to_owned();
-		Ok(super::copy_progressive_impl(from, to, attrs.into()))
+	async fn copy_from(&self, from: Url<'_>, attrs: Attrs) -> io::Result<Transmit> {
+		let Some(from) = from.as_local() else { return Ok(Transmit::unsupported()) };
+
+		Ok(super::copy_progressive(from.to_owned(), self.path.to_owned(), attrs))
 	}
 
 	#[inline]
@@ -79,33 +65,22 @@ impl<'a> Engine for Local<'a> {
 	}
 
 	#[inline]
-	async fn metadata(&self) -> io::Result<Cha> {
-		Ok(Cha::new(self.path.file_name().unwrap_or_default(), tokio::fs::metadata(self.path).await?))
+	async fn metadata(&self) -> io::Result<Stat> {
+		Ok(Stat::new(self.path.file_name().unwrap_or_default(), tokio::fs::metadata(self.path).await?))
 	}
 
 	#[inline]
 	async fn new<'b>(url: Url<'b>) -> io::Result<Self::Me<'b>> {
-		match url {
-			Url::Regular(loc) | Url::Search { loc, .. } => Ok(Self::Me { url, path: loc.as_inner() }),
-			Url::Mount { .. } | Url::Hub { .. } | Url::Scope { .. } | Url::Sftp { .. } => {
-				Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Not a local URL: {url:?}")))
-			}
-		}
+		let path = url.as_local().ok_or_else(|| {
+			io::Error::new(io::ErrorKind::InvalidInput, format!("Not a local URL: {url}"))
+		})?;
+
+		Ok(Self::Me { url, path })
 	}
 
 	#[inline]
 	async fn read_dir(self) -> io::Result<Self::ReadDir> {
-		Ok(match self.url.kind() {
-			AuthKind::Regular => Self::ReadDir::Regular(tokio::fs::read_dir(self.path).await?),
-			AuthKind::Search => Self::ReadDir::Others {
-				reader: tokio::fs::read_dir(self.path).await?,
-				dir:    Arc::new(self.url.to_owned()),
-			},
-			AuthKind::Mount | AuthKind::Hub | AuthKind::Scope | AuthKind::Sftp => Err(io::Error::new(
-				io::ErrorKind::InvalidInput,
-				format!("Not a local URL: {:?}", self.url),
-			))?,
-		})
+		Ok(super::ReadDir(tokio::fs::read_dir(self.path).await?))
 	}
 
 	#[inline]
@@ -147,7 +122,7 @@ impl<'a> Engine for Local<'a> {
 		let path = self.path.to_owned();
 		tokio::task::spawn_blocking(move || {
 			let a = mode.map_or(Ok(()), |mode| Self::set_mode(&path, mode));
-			let b = times.map_or(Ok(()), |times| Self::set_times(&path, times));
+			let b = times.map_or(Ok(()), |times| yazi_shim::fs::set_times(&path, times));
 			a.and(b)
 		})
 		.await?
@@ -207,8 +182,8 @@ impl<'a> Engine for Local<'a> {
 	}
 
 	#[inline]
-	async fn symlink_metadata(&self) -> io::Result<Cha> {
-		Ok(Cha::new(
+	async fn symlink_metadata(&self) -> io::Result<Stat> {
+		Ok(Stat::new(
 			self.path.file_name().unwrap_or_default(),
 			tokio::fs::symlink_metadata(self.path).await?,
 		))
@@ -265,7 +240,7 @@ impl<'a> Local<'a> {
 		Self { url: Url::regular(path), path: path.as_ref() }
 	}
 
-	fn set_mode(path: &Path, mode: ChaMode) -> io::Result<()> {
+	fn set_mode(path: &Path, mode: StatMode) -> io::Result<()> {
 		#[cfg(unix)]
 		{
 			std::fs::set_permissions(path, mode.into())
@@ -273,17 +248,13 @@ impl<'a> Local<'a> {
 
 		#[cfg(windows)]
 		{
-			use std::os::windows::ffi::OsStrExt;
+			use yazi_shim::ToWide;
 
-			let path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
-			let perm = if mode.contains(ChaMode::U_WRITE) { libc::S_IWRITE } else { libc::S_IREAD };
+			let path = path.to_wide();
+			let perm = if mode.contains(StatMode::U_WRITE) { libc::S_IWRITE } else { libc::S_IREAD };
 
 			let result = unsafe { libc::wchmod(path.as_ptr(), perm) };
 			if result == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
 		}
-	}
-
-	fn set_times(path: &Path, times: FileTimes) -> io::Result<()> {
-		std::fs::File::open(path)?.set_times(times)
 	}
 }

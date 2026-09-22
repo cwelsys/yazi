@@ -12,9 +12,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 
 ## [Unreleased]
 
+### Added
+
+- Custom sorting ([#4363])
+- Dynamic virtual filesystem Lua API ([#4338])
+- New `patch` DDS event for reporting incremental changes to files ([#4365])
+
+### Changed
+
+- Supersede `search` action with `plugin rg` and `plugin fd` ([#4335])
+- Rename `Spec::is_search` property and `escape --search` action to `Spec::is_view` and `escape --view`, respectively ([#4335])
+- Move `search_title`, `search_origin`, and `search_offset` from `[input]` in `yazi.toml` to `[rg]`/`[fd]` in `theme.toml` as `title` and `position` ([#4335])
+
+### Deprecated
+
+- Deprecate `fs.cha()` and `File.cha` in favor of `fs.stat()` and `File.stat` to align with OS terminology ([#4359])
+
 ### Fixed
 
+- Tolerate non-conforming orphaned trash items on Linux ([#4343])
 - Compatibility with legacy Git symlinks in package cache ([#4319])
+- Workaround Konsole kitty graphics and keyboard protocol bugs ([#4370])
+- Correct diacritic input for <kbd>Option</kbd> key combos in kitty keyboard protocol ([#4346])
+
+### Improved
+
+- Asyncly parse the entry arguments to avoid blocking app startup ([#4352])
 
 ## [v26.9.1]
 
@@ -1856,3 +1879,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 [#4306]: https://github.com/sxyazi/yazi/pull/4306
 [#4309]: https://github.com/sxyazi/yazi/pull/4309
 [#4319]: https://github.com/sxyazi/yazi/pull/4319
+[#4335]: https://github.com/sxyazi/yazi/pull/4335
+[#4338]: https://github.com/sxyazi/yazi/pull/4338
+[#4343]: https://github.com/sxyazi/yazi/pull/4343
+[#4346]: https://github.com/sxyazi/yazi/pull/4346
+[#4352]: https://github.com/sxyazi/yazi/pull/4352
+[#4359]: https://github.com/sxyazi/yazi/pull/4359
+[#4363]: https://github.com/sxyazi/yazi/pull/4363
+[#4365]: https://github.com/sxyazi/yazi/pull/4365
+[#4370]: https://github.com/sxyazi/yazi/pull/4370

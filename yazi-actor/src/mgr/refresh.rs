@@ -1,11 +1,11 @@
 use anyhow::Result;
 use yazi_fs::CWD;
-use yazi_macro::{act, succ, tab};
+use yazi_macro::{succ, tab};
 use yazi_parser::VoidForm;
 use yazi_shared::{data::Data, url::UrlLike};
 use yazi_watcher::MgrProxy;
 
-use crate::{Actor, Ctx};
+use crate::{Actor, Ctx, act};
 
 pub struct Refresh;
 
@@ -15,15 +15,15 @@ impl Actor for Refresh {
 	const NAME: &str = "refresh";
 
 	fn act(cx: &mut Ctx, _: Self::Form) -> Result<Data> {
-		CWD.set(cx.cwd(), Self::cwd_changed);
+		CWD.set(cx.active().cwd(), Self::cwd_changed);
 
 		let tab = tab!(cx);
-		cx.core.mgr.watcher.refresher.refresh(
+		cx.core.mgr.watcher.refresher.request(
 			[Some(&mut tab.current), tab.parent.as_mut()]
 				.into_iter()
 				.flatten()
-				.filter(|f| f.url.is_absolute() && !f.url.is_search())
-				.map(|f| f.take_request()),
+				.filter(|f| f.is_absolute() || !f.auth().is_local())
+				.map(|f| f.take_refresh()),
 		);
 
 		act!(mgr:peek, cx)?;
@@ -37,7 +37,7 @@ impl Actor for Refresh {
 
 impl Refresh {
 	fn cwd_changed() {
-		if CWD.load().kind().is_virtual() {
+		if !CWD.load().auth().is_local() {
 			MgrProxy::watch();
 		}
 	}

@@ -1,8 +1,8 @@
 use anyhow::{Result, bail};
 use yazi_config::{YAZI, popup::ConfirmCfg};
 use yazi_dds::Pubsub;
-use yazi_fs::{FilesOp, file::File};
-use yazi_macro::{act, input, log_if_err, ok_or_not_found, succ};
+use yazi_fs::{file::File, op::FilesOp};
+use yazi_macro::{log_if_err, ok_or_not_found, succ};
 use yazi_parser::mgr::RenameForm;
 use yazi_proxy::{ConfirmProxy, MgrProxy};
 use yazi_shared::{data::Data, id::Id, url::{UrlBuf, UrlLike}};
@@ -10,7 +10,7 @@ use yazi_vfs::{VfsFile, engine};
 use yazi_watcher::WATCHER;
 use yazi_widgets::input::InputEvent;
 
-use crate::{Actor, Ctx};
+use crate::{Actor, Ctx, act, input};
 
 pub struct Rename;
 
@@ -41,7 +41,7 @@ impl Actor for Rename {
 			_ => None,
 		};
 
-		let (tab, old) = (cx.tab().id, hovered.url_owned());
+		let (tab, old) = (cx.tab().id, hovered.to_url());
 		let mut input =
 			input!(cx, YAZI.input.rename(hovered.is_dir()).with_value(name).with_cursor(cursor))?;
 
@@ -78,7 +78,7 @@ impl Rename {
 			&& let Some((trail, key)) = u.pair()
 		{
 			ok_or_not_found!(engine::rename(&u, &new).await);
-			FilesOp::Deleting(trail.to_owned(), [key.into()].into()).emit();
+			FilesOp::Delete(trail.to_owned(), [key.into()].into()).emit();
 		}
 
 		let new = engine::casefold(&new).await?;
@@ -86,10 +86,10 @@ impl Rename {
 
 		let file = engine::file(&new).await?;
 		if new_t == old_t {
-			FilesOp::Upserting(old_t.into(), [(old_k.into(), file)].into()).emit();
+			FilesOp::Upsert(old_t.into(), [(old_k.into(), file)].into()).emit();
 		} else {
-			FilesOp::Deleting(old_t.into(), [old_k.into()].into()).emit();
-			FilesOp::Upserting(new_t.into(), [(new_k.into(), file)].into()).emit();
+			FilesOp::Delete(old_t.into(), [old_k.into()].into()).emit();
+			FilesOp::Upsert(new_t.into(), [(new_k.into(), file)].into()).emit();
 		}
 
 		MgrProxy::reveal(&new);

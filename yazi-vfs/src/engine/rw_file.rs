@@ -27,14 +27,14 @@ impl From<super::lua::File> for RwFile {
 }
 
 impl RwFile {
-	pub(crate) async fn metadata(&self) -> io::Result<yazi_fs::cha::Cha> {
+	pub(crate) async fn metadata(&self) -> io::Result<yazi_fs::stat::Stat> {
 		Ok(match self {
 			Self::Tokio(f, url) => {
-				yazi_fs::cha::Cha::new(url.name().unwrap_or_default(), f.metadata().await?)
+				yazi_fs::stat::Stat::new(url.name().unwrap_or_default(), f.metadata().await?)
 			}
 			Self::Sftp(f, url) => {
 				let name = url.name().unwrap_or_default().encoded_bytes();
-				super::sftp::Cha::try_from((name, &f.fstat().await?))?.0
+				super::sftp::Stat::try_from((name, &f.fstat().await?))?.0
 			}
 			Self::Lua(f) => f.metadata().await?,
 		})
@@ -43,8 +43,8 @@ impl RwFile {
 	pub async fn file(&self) -> io::Result<File> {
 		Ok(match self {
 			Self::Tokio(_, url) | Self::Sftp(_, url) => {
-				let cha = self.metadata().await?;
-				File::from_follow(url.clone(), cha).await
+				let stat = self.metadata().await?;
+				File::from_follow(url.clone(), stat).await
 			}
 			Self::Lua(f) => f.file().await?,
 		})
@@ -55,9 +55,9 @@ impl RwFile {
 			return f.into_file().await;
 		}
 
-		let cha = self.metadata().await?;
+		let stat = self.metadata().await?;
 		Ok(match self {
-			Self::Tokio(_, url) | Self::Sftp(_, url) => File { url, cha, extra: Default::default() },
+			Self::Tokio(_, url) | Self::Sftp(_, url) => File { url, stat, extra: Default::default() },
 			Self::Lua(_) => unreachable!(),
 		})
 	}
@@ -106,22 +106,14 @@ impl AsyncRead for RwFile {
 		cx: &mut std::task::Context<'_>,
 		buf: &mut tokio::io::ReadBuf<'_>,
 	) -> std::task::Poll<io::Result<()>> {
-		match &mut *self {
-			RwFile::Tokio(f, _) => Pin::new(f).poll_read(cx, buf),
-			RwFile::Sftp(f, _) => Pin::new(f).poll_read(cx, buf),
-			RwFile::Lua(f) => Pin::new(f).poll_read(cx, buf),
-		}
+		poll_rw!(self, poll_read, cx, buf)
 	}
 }
 
 impl AsyncSeek for RwFile {
 	#[inline]
 	fn start_seek(mut self: Pin<&mut Self>, position: io::SeekFrom) -> io::Result<()> {
-		match &mut *self {
-			RwFile::Tokio(f, _) => Pin::new(f).start_seek(position),
-			RwFile::Sftp(f, _) => Pin::new(f).start_seek(position),
-			RwFile::Lua(f) => Pin::new(f).start_seek(position),
-		}
+		poll_rw!(self, start_seek, position)
 	}
 
 	#[inline]
@@ -129,11 +121,7 @@ impl AsyncSeek for RwFile {
 		mut self: Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
 	) -> std::task::Poll<io::Result<u64>> {
-		match &mut *self {
-			RwFile::Tokio(f, _) => Pin::new(f).poll_complete(cx),
-			RwFile::Sftp(f, _) => Pin::new(f).poll_complete(cx),
-			RwFile::Lua(f) => Pin::new(f).poll_complete(cx),
-		}
+		poll_rw!(self, poll_complete, cx)
 	}
 }
 
@@ -144,11 +132,7 @@ impl AsyncWrite for RwFile {
 		cx: &mut std::task::Context<'_>,
 		buf: &[u8],
 	) -> std::task::Poll<Result<usize, io::Error>> {
-		match &mut *self {
-			RwFile::Tokio(f, _) => Pin::new(f).poll_write(cx, buf),
-			RwFile::Sftp(f, _) => Pin::new(f).poll_write(cx, buf),
-			RwFile::Lua(f) => Pin::new(f).poll_write(cx, buf),
-		}
+		poll_rw!(self, poll_write, cx, buf)
 	}
 
 	#[inline]
@@ -156,11 +140,7 @@ impl AsyncWrite for RwFile {
 		mut self: Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
 	) -> std::task::Poll<Result<(), io::Error>> {
-		match &mut *self {
-			RwFile::Tokio(f, _) => Pin::new(f).poll_flush(cx),
-			RwFile::Sftp(f, _) => Pin::new(f).poll_flush(cx),
-			RwFile::Lua(f) => Pin::new(f).poll_flush(cx),
-		}
+		poll_rw!(self, poll_flush, cx)
 	}
 
 	#[inline]
@@ -168,11 +148,7 @@ impl AsyncWrite for RwFile {
 		mut self: Pin<&mut Self>,
 		cx: &mut std::task::Context<'_>,
 	) -> std::task::Poll<Result<(), io::Error>> {
-		match &mut *self {
-			RwFile::Tokio(f, _) => Pin::new(f).poll_shutdown(cx),
-			RwFile::Sftp(f, _) => Pin::new(f).poll_shutdown(cx),
-			RwFile::Lua(f) => Pin::new(f).poll_shutdown(cx),
-		}
+		poll_rw!(self, poll_shutdown, cx)
 	}
 
 	#[inline]
@@ -181,19 +157,15 @@ impl AsyncWrite for RwFile {
 		cx: &mut std::task::Context<'_>,
 		bufs: &[io::IoSlice<'_>],
 	) -> std::task::Poll<Result<usize, io::Error>> {
-		match &mut *self {
-			RwFile::Tokio(f, _) => Pin::new(f).poll_write_vectored(cx, bufs),
-			RwFile::Sftp(f, _) => Pin::new(f).poll_write_vectored(cx, bufs),
-			RwFile::Lua(f) => Pin::new(f).poll_write_vectored(cx, bufs),
-		}
+		poll_rw!(self, poll_write_vectored, cx, bufs)
 	}
 
 	#[inline]
 	fn is_write_vectored(&self) -> bool {
 		match self {
-			RwFile::Tokio(f, _) => f.is_write_vectored(),
-			RwFile::Sftp(f, _) => f.is_write_vectored(),
-			RwFile::Lua(f) => f.is_write_vectored(),
+			Self::Tokio(f, _) => f.is_write_vectored(),
+			Self::Sftp(f, _) => f.is_write_vectored(),
+			Self::Lua(f) => f.is_write_vectored(),
 		}
 	}
 }

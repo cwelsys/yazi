@@ -1,8 +1,7 @@
 use anyhow::Result;
-use yazi_actor::Ctx;
+use yazi_actor::{Ctx, act};
 use yazi_config::{KEYMAP, keymap::{Chord, Key}};
 use yazi_core::which::WhichOpt;
-use yazi_macro::act;
 use yazi_shared::Layer;
 use yazi_term::event::KeyEvent;
 
@@ -30,7 +29,7 @@ impl<'a> Router<'a> {
 		}
 
 		let layer = core.layer();
-		let key = Key::from(key);
+		let Ok(key) = Key::try_from(key) else { return Ok(false) };
 		Ok(match layer {
 			L::Null | L::App | L::Notify => unreachable!(),
 			L::Mgr | L::Tasks | L::Spot | L::Pick | L::Input | L::Confirm => {

@@ -126,7 +126,7 @@ function Entity:ellipsis(max)
 	for _, child in ipairs(self._children) do
 		adv = adv + child.width
 		if adv >= max then
-			return not f.cha.is_dir and f.url.ext and "…." .. f.url.ext or nil
+			return not f.stat.is_dir and f.url.ext and "…." .. f.url.ext or nil
 		elseif child.id == 4 then
 			break
 		end
@@ -135,7 +135,9 @@ end
 
 -- Mouse events
 function Entity:click(event, up)
-	if up or event.is_middle then
+	if up then
+		return
+	elseif not event.is_left and not event.is_right then
 		return
 	end
 

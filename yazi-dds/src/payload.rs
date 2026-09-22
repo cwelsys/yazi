@@ -2,7 +2,7 @@ use std::{fmt::Display, io::Write, str::FromStr};
 
 use anyhow::{Result, anyhow};
 use mlua::{IntoLua, Lua, Value};
-use yazi_boot::{BOOT, ID};
+use yazi_boot::{ARGS, ID};
 use yazi_macro::{emit, impl_data_any, relay};
 use yazi_shared::{event::ActionCow, id::Id};
 
@@ -27,9 +27,9 @@ impl<'a> Payload<'a> {
 
 	pub(super) fn try_flush(&self) -> Result<()> {
 		let b = if self.receiver == 0 {
-			BOOT.remote_events.contains(self.body.kind())
+			ARGS.remote_events.contains(self.body.kind())
 		} else if let Ember::Custom(b) = &self.body {
-			BOOT.local_events.contains(&b.kind)
+			ARGS.local_events.contains(&b.kind)
 		} else {
 			false
 		};
@@ -93,6 +93,7 @@ impl Display for Payload<'_> {
 			Ember::Bye(b) => serde_json::to_string(b),
 			Ember::Cd(b) => serde_json::to_string(b),
 			Ember::Load(b) => serde_json::to_string(b),
+			Ember::Patch(b) => serde_json::to_string(b),
 			Ember::Hover(b) => serde_json::to_string(b),
 			Ember::Tab(b) => serde_json::to_string(b),
 			Ember::Rename(b) => serde_json::to_string(b),

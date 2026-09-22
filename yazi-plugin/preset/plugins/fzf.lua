@@ -12,8 +12,8 @@ function M:entry()
 	ya.emit("escape", { visual = true })
 
 	local cwd, selected = state()
-	if cwd.spec.is_virtual then
-		return ya.notify { title = "Fzf", content = "Not supported under virtual filesystems", timeout = 5, level = "warn" }
+	if not cwd.spec.is_regular then
+		return ya.notify { title = "Fzf", content = "Only supported for regular paths", timeout = 5, level = "warn" }
 	end
 
 	local permit = ui.hide()
@@ -28,8 +28,8 @@ function M:entry()
 	if #urls == 0 then
 		return
 	elseif #urls == 1 then
-		local cha = #selected == 0 and fs.cha(urls[1])
-		return ya.emit(cha and cha.is_dir and "cd" or "reveal", { urls[1], raw = true })
+		local stat = #selected == 0 and fs.stat(urls[1])
+		return ya.emit(stat and stat.is_dir and "cd" or "reveal", { urls[1], raw = true })
 	end
 
 	local files = {}

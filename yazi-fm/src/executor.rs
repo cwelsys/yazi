@@ -1,6 +1,6 @@
 use anyhow::Result;
-use yazi_actor::Ctx;
-use yazi_macro::{act, succ};
+use yazi_actor::{Ctx, act};
+use yazi_macro::succ;
 use yazi_shared::{Layer, data::Data, event::ActionCow};
 use yazi_widgets::input::InputMode;
 
@@ -124,8 +124,6 @@ impl<'a> Executor<'a> {
 		on!(hidden);
 		on!(excluded);
 		on!(linemode);
-		on!(search);
-		on!(search_do);
 		on!(bulk_exit);
 		on!(bulk_rename);
 		on!(bulk_create);

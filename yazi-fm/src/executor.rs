@@ -1,5 +1,6 @@
 use anyhow::Result;
-use yazi_actor::{Ctx, act};
+use yazi_actor::act;
+use yazi_core::Ctx;
 use yazi_macro::succ;
 use yazi_shared::{Layer, data::Data, event::ActionCow};
 use yazi_widgets::input::InputMode;
@@ -34,7 +35,7 @@ impl<'a> Executor<'a> {
 	fn null(&mut self, _action: ActionCow) -> Result<Data> { succ!() }
 
 	fn app(&mut self, action: ActionCow) -> Result<Data> {
-		let cx = &mut Ctx::new(&action, &mut self.app.core, &mut self.app.term)?;
+		let cx = &mut Ctx::new(&action, &mut self.app.core)?;
 
 		macro_rules! on {
 			($name:ident) => {
@@ -63,7 +64,7 @@ impl<'a> Executor<'a> {
 	}
 
 	fn mgr(&mut self, action: ActionCow) -> Result<Data> {
-		let cx = &mut Ctx::new(&action, &mut self.app.core, &mut self.app.term)?;
+		let cx = &mut Ctx::new(&action, &mut self.app.core)?;
 
 		macro_rules! on {
 			($name:ident) => {
@@ -164,7 +165,7 @@ impl<'a> Executor<'a> {
 	}
 
 	fn tasks(&mut self, action: ActionCow) -> Result<Data> {
-		let cx = &mut Ctx::new(&action, &mut self.app.core, &mut self.app.term)?;
+		let cx = &mut Ctx::new(&action, &mut self.app.core)?;
 
 		macro_rules! on {
 			($name:ident) => {
@@ -197,7 +198,7 @@ impl<'a> Executor<'a> {
 	}
 
 	fn spot(&mut self, action: ActionCow) -> Result<Data> {
-		let cx = &mut Ctx::new(&action, &mut self.app.core, &mut self.app.term)?;
+		let cx = &mut Ctx::new(&action, &mut self.app.core)?;
 
 		macro_rules! on {
 			($name:ident) => {
@@ -224,7 +225,7 @@ impl<'a> Executor<'a> {
 	}
 
 	fn pick(&mut self, action: ActionCow) -> Result<Data> {
-		let cx = &mut Ctx::new(&action, &mut self.app.core, &mut self.app.term)?;
+		let cx = &mut Ctx::new(&action, &mut self.app.core)?;
 
 		macro_rules! on {
 			($name:ident) => {
@@ -254,13 +255,13 @@ impl<'a> Executor<'a> {
 		macro_rules! on {
 			($name:ident) => {
 				if action.name == stringify!($name) {
-					let cx = &mut Ctx::new(&action, &mut self.app.core, &mut self.app.term)?;
+					let cx = &mut Ctx::new(&action, &mut self.app.core)?;
 					return act!(input:$name, cx, action);
 				}
 			};
 			($layer:ident : $name:ident, $opt:expr) => {{
 				drop(guard);
-				let cx = &mut Ctx::new(&action, &mut self.app.core, &mut self.app.term)?;
+				let cx = &mut Ctx::new(&action, &mut self.app.core)?;
 				return act!($layer:$name, cx, $opt);
 			}};
 		}
@@ -294,7 +295,7 @@ impl<'a> Executor<'a> {
 	}
 
 	fn confirm(&mut self, action: ActionCow) -> Result<Data> {
-		let cx = &mut Ctx::new(&action, &mut self.app.core, &mut self.app.term)?;
+		let cx = &mut Ctx::new(&action, &mut self.app.core)?;
 
 		macro_rules! on {
 			($name:ident) => {
@@ -312,7 +313,7 @@ impl<'a> Executor<'a> {
 	}
 
 	fn help(&mut self, action: ActionCow) -> Result<Data> {
-		let cx = &mut Ctx::new(&action, &mut self.app.core, &mut self.app.term)?;
+		let cx = &mut Ctx::new(&action, &mut self.app.core)?;
 
 		macro_rules! on {
 			($name:ident) => {
@@ -340,7 +341,7 @@ impl<'a> Executor<'a> {
 	}
 
 	fn cmp(&mut self, action: ActionCow) -> Result<Data> {
-		let cx = &mut Ctx::new(&action, &mut self.app.core, &mut self.app.term)?;
+		let cx = &mut Ctx::new(&action, &mut self.app.core)?;
 
 		macro_rules! on {
 			($name:ident) => {
@@ -367,7 +368,7 @@ impl<'a> Executor<'a> {
 	}
 
 	fn which(&mut self, action: ActionCow) -> Result<Data> {
-		let cx = &mut Ctx::new(&action, &mut self.app.core, &mut self.app.term)?;
+		let cx = &mut Ctx::new(&action, &mut self.app.core)?;
 
 		macro_rules! on {
 			($name:ident) => {
@@ -384,7 +385,7 @@ impl<'a> Executor<'a> {
 	}
 
 	fn notify(&mut self, action: ActionCow) -> Result<Data> {
-		let cx = &mut Ctx::new(&action, &mut self.app.core, &mut self.app.term)?;
+		let cx = &mut Ctx::new(&action, &mut self.app.core)?;
 
 		macro_rules! on {
 			($name:ident) => {

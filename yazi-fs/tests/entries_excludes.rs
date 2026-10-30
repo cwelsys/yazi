@@ -27,7 +27,7 @@ fn visible(entries: &Entries) -> Vec<String> {
 fn loaded() -> Entries {
 	let mut entries = Entries::new(true);
 	entries.set_excludes(Some(hiding_secret()));
-	entries.update_full(vec![file("a"), file("secret")]);
+	entries.update_full(vec![file("a"), file("secret")].into());
 	entries
 }
 

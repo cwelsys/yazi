@@ -7,7 +7,5 @@ yazi_macro::mod_flat!(auth cwd entries exclude filter fns hash normalizer sorter
 pub fn init() {
 	CWD.init(<_>::default());
 
-	mounts::init();
-
 	Xdg::load();
 }

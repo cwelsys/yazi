@@ -16,15 +16,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 
 - Rclone integration ([#4383])
 - Archive extraction progress ([#4431])
+- Autocomplete VFS URLs and package IDs ([#4464])
 - Custom border shape ([#4439])
 - Custom sorting ([#4363])
 - Windows drives view ([#4412])
 - Dynamic virtual filesystem Lua API ([#4338])
 - `update` methods to dynamic Lua APIs ([#4389])
 - Respect user locale date format ([#4395])
+- New `focus` DDS event for terminal focus changes ([#4474])
 - New `patch` DDS event for reporting incremental changes to files ([#4365])
 - Image preview adaptation for `st-graphics` terminal ([#4414])
 - Random read/write for virtual file systems ([#4451])
+- Windows MSI installers for stable and nightly releases ([#4473])
 - Windows support for `fs.partitions()` ([#4402])
 
 ### Changed
@@ -43,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 ### Fixed
 
 - Tolerate non-conforming orphaned trash items on Linux ([#4343])
+- Allow for omitted fields in the DnD protocol ([#4467])
 - Compatibility with legacy Git symlinks in package cache ([#4319])
 - Workaround Konsole kitty graphics and keyboard protocol bugs ([#4370])
 - Correct diacritic input for <kbd>Option</kbd> key combos in kitty keyboard protocol ([#4346])
@@ -52,6 +56,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 - Rearm file copier ([#4424])
 - Switch Lua to generational GC ([#4397])
 - Asyncly parse the entry arguments to avoid blocking app startup ([#4352])
+
+### Packaging
+
+- Move shell completion templates for `ya` and `yazi` to `assets/completions` ([#4464])
 
 ## [v26.9.1]
 
@@ -1913,3 +1921,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/):
 [#4431]: https://github.com/sxyazi/yazi/pull/4431
 [#4439]: https://github.com/sxyazi/yazi/pull/4439
 [#4451]: https://github.com/sxyazi/yazi/pull/4451
+[#4464]: https://github.com/sxyazi/yazi/pull/4464
+[#4467]: https://github.com/sxyazi/yazi/pull/4467
+[#4473]: https://github.com/sxyazi/yazi/pull/4473
+[#4474]: https://github.com/sxyazi/yazi/pull/4474

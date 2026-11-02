@@ -4,11 +4,6 @@ use hashbrown::HashMap;
 use yazi_fs::{Entries, ExcludeFilter, file::File};
 use yazi_shared::url::{UrlBuf, UrlLike};
 
-fn init() {
-	static ONCE: std::sync::Once = std::sync::Once::new();
-	ONCE.call_once(yazi_shared::init);
-}
-
 fn file(name: &str) -> File {
 	File::from_dummy(UrlBuf::from_str(&format!("/p/{name}")).expect("url"), None)
 }
@@ -33,13 +28,13 @@ fn loaded() -> Entries {
 
 #[test]
 fn a_full_load_conceals_the_excluded_entry() {
-	init();
+	yazi_shared::init_tests();
 	assert_eq!(visible(&loaded()), ["/p/a"]);
 }
 
 #[test]
 fn an_in_place_update_does_not_resurface_it() {
-	init();
+	yazi_shared::init_tests();
 	let mut entries = loaded();
 	let mut files = HashMap::new();
 	files.insert(file("secret").key().to_owned(), file("secret"));
@@ -50,7 +45,7 @@ fn an_in_place_update_does_not_resurface_it() {
 
 #[test]
 fn an_in_place_update_still_lands_for_a_visible_entry() {
-	init();
+	yazi_shared::init_tests();
 	let mut entries = loaded();
 
 	let mut files = HashMap::new();
@@ -62,7 +57,7 @@ fn an_in_place_update_still_lands_for_a_visible_entry() {
 
 #[test]
 fn toggling_show_excluded_reveals_and_conceals_again() {
-	init();
+	yazi_shared::init_tests();
 	let mut entries = loaded();
 
 	entries.set_show_excluded(true);
@@ -76,7 +71,7 @@ fn toggling_show_excluded_reveals_and_conceals_again() {
 
 #[test]
 fn an_update_while_revealed_keeps_the_entry_visible() {
-	init();
+	yazi_shared::init_tests();
 	let mut entries = loaded();
 	entries.set_show_excluded(true);
 

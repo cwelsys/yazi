@@ -69,10 +69,6 @@ impl AsUrl for Folder {
 	fn as_url(&self) -> Url<'_> { self.file.as_url() }
 }
 
-impl AsUrl for &Folder {
-	fn as_url(&self) -> Url<'_> { self.file.as_url() }
-}
-
 impl UrlLike for Folder {}
 
 impl Folder {
